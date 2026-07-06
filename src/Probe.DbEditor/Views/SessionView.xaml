@@ -1,0 +1,200 @@
+<UserControl x:Class="Probe.DbEditor.Views.SessionView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    mc:Ignorable="d"
+    d:DesignHeight="720"
+    d:DesignWidth="1080"
+    Loaded="SessionView_Loaded">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="40" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="160" />
+        </Grid.RowDefinitions>
+
+        <Border Grid.Row="0" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1" Background="{StaticResource SurfaceBrush}"
+            Padding="8">
+            <DockPanel>
+                <TextBlock x:Name="SessionTitleText"
+                    DockPanel.Dock="Left"
+                    VerticalAlignment="Center"
+                    FontWeight="SemiBold"
+                    Margin="0,0,16,0" />
+                <StackPanel Orientation="Horizontal" DockPanel.Dock="Right">
+                    <TextBlock VerticalAlignment="Center" Margin="0,0,6,0" Text="Limit" />
+                    <TextBox x:Name="LimitTextBox" Width="72" Text="500" Margin="0,0,8,0" />
+                    <CheckBox x:Name="DeferEditsToggle"
+                        Content="Review edits before apply"
+                        IsChecked="True"
+                        VerticalAlignment="Center"
+                        Margin="0,0,12,0" />
+                    <Button Content="Refresh" Padding="10,4" Margin="0,0,8,0" Click="Refresh_Click" />
+                    <Button Content="Apply Edits" Padding="10,4" Margin="0,0,8,0"
+                        Click="ApplyPending_Click" />
+                    <Button Content="Revert Edits" Padding="10,4" Click="RevertPending_Click" />
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="280" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <Border Grid.Column="0" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,1,0" Background="{StaticResource SurfaceMutedBrush}">
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Top" FontWeight="SemiBold" Margin="10" Text="Schemas" />
+                    <TreeView x:Name="SchemaTree"
+                        SelectedItemChanged="SchemaTree_SelectedItemChanged" />
+                </DockPanel>
+            </Border>
+
+            <TabControl x:Name="WorkspaceTabs" Grid.Column="1">
+                <TabItem x:Name="ContentTab" Header="Content">
+                    <DataGrid x:Name="TableDataGrid"
+                        AutoGenerateColumns="True"
+                        CanUserAddRows="False"
+                        CanUserDeleteRows="False"
+                        EnableRowVirtualization="True"
+                        EnableColumnVirtualization="True"
+                        SelectionUnit="CellOrRowHeader"
+                        GridLinesVisibility="All"
+                        AutoGeneratingColumn="TableDataGrid_AutoGeneratingColumn"
+                        CellEditEnding="TableDataGrid_CellEditEnding"
+                        CurrentCellChanged="TableDataGrid_CurrentCellChanged" />
+                </TabItem>
+
+                <TabItem Header="Indexes">
+                    <DockPanel Margin="10">
+                        <Border DockPanel.Dock="Top" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1"
+                            Padding="0,0,0,10" Margin="0,0,0,10">
+                            <WrapPanel>
+                                <TextBlock VerticalAlignment="Center" Text="Name" Margin="0,0,6,0" />
+                                <TextBox x:Name="IndexNameTextBox" Width="160" Margin="0,0,12,0" />
+                                <TextBlock VerticalAlignment="Center" Text="Columns"
+                                    Margin="0,0,6,0" />
+                                <TextBox x:Name="IndexColumnsTextBox" Width="260" Margin="0,0,12,0"
+                                    ToolTip="Comma-separated column names" />
+                                <CheckBox x:Name="UniqueIndexCheckBox" Content="Unique"
+                                    VerticalAlignment="Center" Margin="0,0,12,0" />
+                                <Button Content="Create" Padding="10,4" Margin="0,0,8,0"
+                                    Click="CreateIndex_Click" />
+                                <Button Content="Drop Selected" Padding="10,4"
+                                    Click="DropIndex_Click" />
+                            </WrapPanel>
+                        </Border>
+                        <DataGrid x:Name="IndexesGrid"
+                            AutoGenerateColumns="False"
+                            IsReadOnly="True"
+                            SelectionMode="Single"
+                            EnableRowVirtualization="True">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Index" Binding="{Binding IndexName}"
+                                    Width="180" />
+                                <DataGridCheckBoxColumn Header="Unique" Binding="{Binding IsUnique}"
+                                    Width="80" />
+                                <DataGridTextColumn Header="Seq" Binding="{Binding Sequence}"
+                                    Width="60" />
+                                <DataGridTextColumn Header="Column" Binding="{Binding ColumnName}"
+                                    Width="180" />
+                                <DataGridTextColumn Header="Type" Binding="{Binding IndexType}"
+                                    Width="120" />
+                                <DataGridTextColumn Header="Cardinality"
+                                    Binding="{Binding Cardinality}" Width="120" />
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </DockPanel>
+                </TabItem>
+
+                <TabItem Header="Overview">
+                    <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                        VerticalScrollBarVisibility="Auto">
+                        <Canvas x:Name="OverviewCanvas" Width="1400" Height="900"
+                            Background="{StaticResource SurfaceMutedBrush}" />
+                    </ScrollViewer>
+                </TabItem>
+
+                <TabItem Header="Query">
+                    <Grid Margin="10">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="150" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <TextBox x:Name="QueryTextBox"
+                            AcceptsReturn="True"
+                            AcceptsTab="True"
+                            VerticalScrollBarVisibility="Auto"
+                            HorizontalScrollBarVisibility="Auto"
+                            FontFamily="Consolas" />
+                        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,8,0,8">
+                            <Button Content="Run" Padding="12,4" Click="RunQuery_Click" />
+                            <TextBlock x:Name="QueryStatusText" VerticalAlignment="Center"
+                                Margin="12,0,0,0" Foreground="{StaticResource MutedTextBrush}" />
+                        </StackPanel>
+                        <DataGrid x:Name="QueryResultGrid"
+                            Grid.Row="2"
+                            AutoGenerateColumns="True"
+                            IsReadOnly="True"
+                            EnableRowVirtualization="True"
+                            EnableColumnVirtualization="True" />
+                    </Grid>
+                </TabItem>
+
+                <TabItem Header="Log">
+                    <DataGrid x:Name="QueryLogGrid"
+                        AutoGenerateColumns="False"
+                        IsReadOnly="True"
+                        EnableRowVirtualization="True">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Time" Binding="{Binding StartedAt}"
+                                Width="180" />
+                            <DataGridCheckBoxColumn Header="OK" Binding="{Binding Success}"
+                                Width="50" />
+                            <DataGridTextColumn Header="Duration ms" Binding="{Binding DurationMs}"
+                                Width="100" />
+                            <DataGridTextColumn Header="Rows" Binding="{Binding RowsAffected}"
+                                Width="80" />
+                            <DataGridTextColumn Header="Statement" Binding="{Binding Statement}"
+                                Width="*" />
+                            <DataGridTextColumn Header="Parameters" Binding="{Binding Parameters}"
+                                Width="260" />
+                            <DataGridTextColumn Header="Error" Binding="{Binding Error}" Width="260" />
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </TabItem>
+            </TabControl>
+        </Grid>
+
+        <GroupBox Grid.Row="2" Header="Pending Edits" Margin="8">
+            <DataGrid x:Name="PendingEditsGrid"
+                AutoGenerateColumns="False"
+                IsReadOnly="True"
+                EnableRowVirtualization="True">
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="Schema" Binding="{Binding SchemaName}" Width="140" />
+                    <DataGridTextColumn Header="Table" Binding="{Binding TableName}" Width="140" />
+                    <DataGridTextColumn Header="Column" Binding="{Binding ColumnName}" Width="140" />
+                    <DataGridTextColumn Header="Old" Binding="{Binding OldValueText}" Width="180" />
+                    <DataGridTextColumn Header="New" Binding="{Binding NewValueText}" Width="180" />
+                    <DataGridTextColumn Header="Key" Binding="{Binding KeyDisplay}" Width="*" />
+                </DataGrid.Columns>
+            </DataGrid>
+        </GroupBox>
+
+        <Border HorizontalAlignment="Left"
+            VerticalAlignment="Bottom"
+            Margin="292,0,0,174"
+            BorderBrush="{StaticResource BorderBrush}"
+            BorderThickness="1"
+            Padding="8,4">
+            <Border.Background>
+                <StaticResource ResourceKey="SurfaceBrush" />
+            </Border.Background>
+            <TextBlock x:Name="SessionStatusText" Foreground="{StaticResource MutedTextBrush}" />
+        </Border>
+    </Grid>
+</UserControl>

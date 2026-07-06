@@ -1,0 +1,423 @@
+using System.Collections.ObjectModel;
+using System.Data;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
+using System.Windows.Data;
+using System.Windows.Threading;
+using Probe.DbEditor.Models;
+using Probe.DbEditor.Services;
+
+namespace Probe.DbEditor.Views;
+
+public partial class SessionView : UserControl
+{
+    private readonly DatabaseSession _session;
+    private readonly SchemaOverviewRenderer _overviewRenderer = new();
+    private readonly ObservableCollection<PendingCellEdit> _pendingEdits = [];
+    private TableDataResult? _currentTable;
+    private bool _loaded;
+    private PendingEditCandidate? _pendingEditCandidate;
+    private bool _isCapturingEdit;
+
+    public SessionView(DatabaseSession session)
+    {
+        _session = session;
+        InitializeComponent();
+        SessionTitleText.Text = session.Profile.Name;
+        PendingEditsGrid.ItemsSource = _pendingEdits;
+        QueryLogGrid.ItemsSource = _session.QueryLog;
+    }
+
+    private async void SessionView_Loaded(object sender, RoutedEventArgs e)
+    {
+        if (_loaded)
+        {
+            return;
+        }
+
+        _loaded = true;
+        await RefreshSchemasAsync();
+    }
+
+    private async void Refresh_Click(object sender, RoutedEventArgs e)
+    {
+        await RefreshSchemasAsync();
+    }
+
+    private async void SchemaTree_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
+    {
+        if (SchemaTree.SelectedItem is TreeViewItem { Tag: TreeNodeInfo { Kind: TreeNodeKind.Table } node })
+        {
+            await LoadTableAsync(node.SchemaName, node.TableName);
+        }
+    }
+
+    private void TableDataGrid_AutoGeneratingColumn(object sender, DataGridAutoGeneratingColumnEventArgs e)
+    {
+        e.Column.Header = e.PropertyName;
+        if (e.Column is DataGridBoundColumn boundColumn)
+        {
+            boundColumn.Binding = new Binding($"[{e.PropertyName}]")
+            {
+                Mode = BindingMode.TwoWay,
+                UpdateSourceTrigger = UpdateSourceTrigger.LostFocus,
+                ValidatesOnExceptions = true
+            };
+        }
+    }
+
+    private void TableDataGrid_CellEditEnding(object sender, DataGridCellEditEndingEventArgs e)
+    {
+        if (e.EditAction != DataGridEditAction.Commit || _currentTable is null)
+        {
+            return;
+        }
+
+        var columnName = Convert.ToString(e.Column.Header);
+        if (string.IsNullOrWhiteSpace(columnName) || e.Row.Item is not DataRowView rowView)
+        {
+            return;
+        }
+
+        if (e.EditingElement is FrameworkElement editingElement)
+        {
+            UpdateEditingElementSource(editingElement);
+        }
+
+        _pendingEditCandidate = new PendingEditCandidate(rowView.Row, columnName);
+    }
+
+    private async void TableDataGrid_CurrentCellChanged(object sender, EventArgs e)
+    {
+        if (_isCapturingEdit || _pendingEditCandidate is null)
+        {
+            return;
+        }
+
+        var candidate = _pendingEditCandidate;
+        _pendingEditCandidate = null;
+        _isCapturingEdit = true;
+        try
+        {
+            await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.Background);
+            await CaptureCellEditAsync(candidate.Row, candidate.ColumnName);
+        }
+        finally
+        {
+            _isCapturingEdit = false;
+        }
+    }
+
+    private async void ApplyPending_Click(object sender, RoutedEventArgs e)
+    {
+        await ApplyPendingEditsAsync();
+    }
+
+    private void RevertPending_Click(object sender, RoutedEventArgs e)
+    {
+        foreach (var row in _pendingEdits.Select(edit => edit.Row).Distinct().ToList())
+        {
+            row.RejectChanges();
+        }
+
+        _pendingEdits.Clear();
+        SetStatus("Pending edits reverted.");
+    }
+
+    private async void CreateIndex_Click(object sender, RoutedEventArgs e)
+    {
+        if (_currentTable is null)
+        {
+            SetStatus("Select a table first.");
+            return;
+        }
+
+        try
+        {
+            var columns = IndexColumnsTextBox.Text
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .ToList();
+            await _session.CreateIndexAsync(
+                _currentTable.SchemaName,
+                _currentTable.TableName,
+                IndexNameTextBox.Text.Trim(),
+                UniqueIndexCheckBox.IsChecked == true,
+                columns);
+            await LoadIndexesAsync(_currentTable.SchemaName, _currentTable.TableName);
+            SetStatus("Index created.");
+        }
+        catch (Exception ex)
+        {
+            SetStatus(ex.Message);
+        }
+    }
+
+    private async void DropIndex_Click(object sender, RoutedEventArgs e)
+    {
+        if (_currentTable is null || IndexesGrid.SelectedItem is not IndexInfo index)
+        {
+            SetStatus("Select an index first.");
+            return;
+        }
+
+        try
+        {
+            await _session.DropIndexAsync(_currentTable.SchemaName, _currentTable.TableName, index.IndexName);
+            await LoadIndexesAsync(_currentTable.SchemaName, _currentTable.TableName);
+            SetStatus("Index dropped.");
+        }
+        catch (Exception ex)
+        {
+            SetStatus(ex.Message);
+        }
+    }
+
+    private async void RunQuery_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            QueryStatusText.Text = "Running...";
+            var result = await _session.RunSqlAsync(QueryTextBox.Text);
+            QueryResultGrid.ItemsSource = result.Rows.DefaultView;
+            QueryStatusText.Text = result.Rows.Rows.Count > 0
+                ? $"{result.Rows.Rows.Count} row(s)"
+                : $"{result.RowsAffected} affected row(s)";
+        }
+        catch (Exception ex)
+        {
+            QueryStatusText.Text = ex.Message;
+        }
+    }
+
+    private async Task RefreshSchemasAsync()
+    {
+        try
+        {
+            SetStatus("Loading schemas...");
+            SchemaTree.Items.Clear();
+            var schemas = await _session.LoadSchemasAsync();
+            foreach (var schema in schemas)
+            {
+                var schemaItem = new TreeViewItem
+                {
+                    Header = schema,
+                    Tag = new TreeNodeInfo(TreeNodeKind.Schema, schema, ""),
+                    IsExpanded = IsDefaultSchema(schema)
+                };
+
+                var tables = await _session.LoadTablesAsync(schema);
+                foreach (var table in tables)
+                {
+                    schemaItem.Items.Add(new TreeViewItem
+                    {
+                        Header = table,
+                        Tag = new TreeNodeInfo(TreeNodeKind.Table, schema, table)
+                    });
+                }
+
+                SchemaTree.Items.Add(schemaItem);
+            }
+
+            SetStatus($"Loaded {schemas.Count} schema(s).");
+        }
+        catch (Exception ex)
+        {
+            SetStatus(ex.Message);
+        }
+    }
+
+    private async Task LoadTableAsync(string schemaName, string tableName)
+    {
+        try
+        {
+            SetStatus($"Loading {schemaName}.{tableName}...");
+            _currentTable = await _session.LoadTableAsync(schemaName, tableName, ParseLimit());
+            TableDataGrid.ItemsSource = _currentTable.Rows.DefaultView;
+            ContentTab.Header = tableName;
+            WorkspaceTabs.SelectedItem = ContentTab;
+            await LoadIndexesAsync(schemaName, tableName);
+            await DrawOverviewAsync(schemaName);
+
+            var editState = _currentTable.PrimaryKeyColumns.Count == 0
+                ? "no primary key; editing disabled"
+                : $"primary key: {string.Join(", ", _currentTable.PrimaryKeyColumns)}";
+            SetStatus($"Loaded {_currentTable.Rows.Rows.Count} row(s), {editState}.");
+        }
+        catch (Exception ex)
+        {
+            SetStatus(ex.Message);
+        }
+    }
+
+    private async Task LoadIndexesAsync(string schemaName, string tableName)
+    {
+        IndexesGrid.ItemsSource = await _session.LoadIndexesAsync(schemaName, tableName);
+    }
+
+    private async Task CaptureCellEditAsync(DataRow row, string columnName)
+    {
+        if (_currentTable is null || row.RowState == DataRowState.Unchanged)
+        {
+            return;
+        }
+
+        if (_currentTable.PrimaryKeyColumns.Count == 0)
+        {
+            row.RejectChanges();
+            SetStatus("Cannot edit rows for tables without a primary key.");
+            return;
+        }
+
+        var oldValue = NormalizeDbValue(row[columnName, DataRowVersion.Original]);
+        var newValue = NormalizeDbValue(row[columnName, DataRowVersion.Current]);
+        if (ValuesEqual(oldValue, newValue))
+        {
+            RemovePendingEdit(row, columnName);
+            return;
+        }
+
+        var keyValues = _currentTable.PrimaryKeyColumns.ToDictionary(
+            key => key,
+            key => NormalizeDbValue(row[key, DataRowVersion.Original]));
+
+        var edit = new PendingCellEdit(
+            row,
+            _currentTable.SchemaName,
+            _currentTable.TableName,
+            columnName,
+            oldValue,
+            newValue,
+            keyValues);
+
+        if (DeferEditsToggle.IsChecked == true)
+        {
+            QueuePendingEdit(edit);
+            SetStatus("Edit queued for review.");
+            return;
+        }
+
+        try
+        {
+            var affected = await _session.ApplyCellUpdateAsync(edit);
+            row.AcceptChanges();
+            SetStatus($"Edit applied. {affected} row(s) affected.");
+        }
+        catch (Exception ex)
+        {
+            row.RejectChanges();
+            SetStatus(ex.Message);
+        }
+    }
+
+    private async Task ApplyPendingEditsAsync()
+    {
+        if (_pendingEdits.Count == 0)
+        {
+            SetStatus("No pending edits.");
+            return;
+        }
+
+        try
+        {
+            var applied = 0;
+            foreach (var editGroup in _pendingEdits.GroupBy(edit => edit.Row).ToList())
+            {
+                foreach (var edit in editGroup)
+                {
+                    applied += await _session.ApplyCellUpdateAsync(edit);
+                }
+
+                editGroup.Key.AcceptChanges();
+                foreach (var edit in editGroup.ToList())
+                {
+                    _pendingEdits.Remove(edit);
+                }
+            }
+
+            SetStatus($"Applied edits. {applied} row(s) affected.");
+        }
+        catch (Exception ex)
+        {
+            SetStatus(ex.Message);
+        }
+    }
+
+    private async Task DrawOverviewAsync(string schemaName)
+    {
+        var tables = await _session.LoadTablesAsync(schemaName);
+        var foreignKeys = await _session.LoadForeignKeysAsync(schemaName);
+        _overviewRenderer.Render(OverviewCanvas, tables, foreignKeys);
+    }
+
+    private int ParseLimit()
+    {
+        return int.TryParse(LimitTextBox.Text, out var limit) && limit > 0 ? limit : 500;
+    }
+
+    private void SetStatus(string message)
+    {
+        SessionStatusText.Text = message;
+    }
+
+    private bool IsDefaultSchema(string schemaName)
+    {
+        return !string.IsNullOrWhiteSpace(_session.Profile.DefaultSchema) &&
+               string.Equals(_session.Profile.DefaultSchema, schemaName, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void QueuePendingEdit(PendingCellEdit edit)
+    {
+        RemovePendingEdit(edit.Row, edit.ColumnName);
+        _pendingEdits.Add(edit);
+    }
+
+    private void RemovePendingEdit(DataRow row, string columnName)
+    {
+        var existingEdits = _pendingEdits.Where(edit =>
+            ReferenceEquals(edit.Row, row) &&
+            string.Equals(edit.ColumnName, columnName, StringComparison.OrdinalIgnoreCase)).ToList();
+        foreach (var existing in existingEdits)
+        {
+            _pendingEdits.Remove(existing);
+        }
+    }
+
+    private static void UpdateEditingElementSource(FrameworkElement editingElement)
+    {
+        var binding = editingElement switch
+        {
+            TextBox textBox => textBox.GetBindingExpression(TextBox.TextProperty),
+            CheckBox checkBox => checkBox.GetBindingExpression(ToggleButton.IsCheckedProperty),
+            ComboBox comboBox => comboBox.GetBindingExpression(Selector.SelectedValueProperty)
+                                 ?? comboBox.GetBindingExpression(ComboBox.TextProperty),
+            _ => null
+        };
+        binding?.UpdateSource();
+    }
+
+    private static object? NormalizeDbValue(object? value)
+    {
+        return value is DBNull ? null : value;
+    }
+
+    private static bool ValuesEqual(object? left, object? right)
+    {
+        if (left is byte[] leftBytes && right is byte[] rightBytes)
+        {
+            return leftBytes.SequenceEqual(rightBytes);
+        }
+
+        return Equals(left, right);
+    }
+
+    private sealed record TreeNodeInfo(TreeNodeKind Kind, string SchemaName, string TableName);
+
+    private sealed record PendingEditCandidate(DataRow Row, string ColumnName);
+
+    private enum TreeNodeKind
+    {
+        Schema,
+        Table
+    }
+}
