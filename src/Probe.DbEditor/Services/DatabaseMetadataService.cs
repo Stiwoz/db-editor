@@ -6,9 +6,9 @@ namespace Probe.DbEditor.Services;
 
 public sealed class DatabaseMetadataService
 {
-    private readonly DatabaseCommandExecutor _executor;
+    private readonly IDatabaseCommandExecutor _executor;
 
-    public DatabaseMetadataService(DatabaseCommandExecutor executor)
+    public DatabaseMetadataService(IDatabaseCommandExecutor executor)
     {
         _executor = executor;
     }

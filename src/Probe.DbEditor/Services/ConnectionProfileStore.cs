@@ -10,11 +10,21 @@ public sealed class ConnectionProfileStore
     private readonly JsonSerializerOptions _jsonOptions = new() { WriteIndented = true };
 
     public ConnectionProfileStore()
+        : this(CreateDefaultFilePath())
+    {
+    }
+
+    internal ConnectionProfileStore(string filePath)
+    {
+        _filePath = filePath;
+    }
+
+    private static string CreateDefaultFilePath()
     {
         var directory = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "ProbeDbEditor");
-        _filePath = Path.Combine(directory, "connections.json");
+        return Path.Combine(directory, "connections.json");
     }
 
     public async Task<List<ConnectionProfile>> LoadAsync()

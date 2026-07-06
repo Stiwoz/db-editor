@@ -7,7 +7,7 @@ using Probe.DbEditor.Security;
 
 namespace Probe.DbEditor.Services;
 
-public sealed class DatabaseCommandExecutor
+public sealed class DatabaseCommandExecutor : IDatabaseCommandExecutor
 {
     private readonly string _connectionString;
     private readonly ObservableCollection<QueryLogEntry> _queryLog;

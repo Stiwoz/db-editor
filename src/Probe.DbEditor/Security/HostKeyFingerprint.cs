@@ -6,16 +6,24 @@ public static class HostKeyFingerprint
 {
     public static bool Matches(HostKeyEventArgs hostKey, string expectedFingerprint)
     {
+        return Matches(
+            hostKey.FingerPrintSHA256,
+            hostKey.FingerPrintMD5,
+            expectedFingerprint);
+    }
+
+    internal static bool Matches(string sha256Fingerprint, string md5Fingerprint, string expectedFingerprint)
+    {
         var normalizedExpected = Normalize(expectedFingerprint);
         if (string.IsNullOrWhiteSpace(normalizedExpected))
         {
             return true;
         }
 
-        return normalizedExpected == Normalize(hostKey.FingerPrintSHA256)
-            || normalizedExpected == Normalize(hostKey.FingerPrintMD5)
-            || normalizedExpected == Normalize($"SHA256:{hostKey.FingerPrintSHA256}")
-            || normalizedExpected == Normalize($"MD5:{hostKey.FingerPrintMD5}");
+        return normalizedExpected == Normalize(sha256Fingerprint)
+            || normalizedExpected == Normalize(md5Fingerprint)
+            || normalizedExpected == Normalize($"SHA256:{sha256Fingerprint}")
+            || normalizedExpected == Normalize($"MD5:{md5Fingerprint}");
     }
 
     private static string Normalize(string value)

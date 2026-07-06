@@ -8,10 +8,10 @@ namespace Probe.DbEditor.Services;
 
 public sealed class TableDataService
 {
-    private readonly DatabaseCommandExecutor _executor;
+    private readonly IDatabaseCommandExecutor _executor;
     private readonly DatabaseMetadataService _metadata;
 
-    public TableDataService(DatabaseCommandExecutor executor, DatabaseMetadataService metadata)
+    public TableDataService(IDatabaseCommandExecutor executor, DatabaseMetadataService metadata)
     {
         _executor = executor;
         _metadata = metadata;
