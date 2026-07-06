@@ -33,12 +33,16 @@ Rust remains viable for a custom-rendered UI, especially with egui or Slint, but
 - Optional SSH host key fingerprint pinning.
 - Saved reusable connection profiles.
 - Multiple active connections in separate tabs.
+- Double-click saved connection profiles to connect.
+- Close connection tabs with middle-click or the tab close button.
 - Schema/table tree.
 - Table browsing in a real editable grid.
+- Table column sorting re-runs the table `SELECT` query instead of sorting the current in-memory result set.
 - Immediate or deferred cell updates.
 - Pending edit review, apply, and revert.
 - Index listing plus create/drop index controls.
 - Query runner and query result grid.
+- Query editor syntax highlighting and completion for SQL keywords, schemas, tables, columns, and variables.
 - Per-connection query log.
 - Basic schema overview drawing from foreign keys.
 

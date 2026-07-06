@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Data;
 using Probe.DbEditor.Models;
 
@@ -48,9 +49,19 @@ public sealed class DatabaseSession : IAsyncDisposable
         string schemaName,
         string tableName,
         int limit,
+        string? orderByColumn = null,
+        ListSortDirection? orderDirection = null,
         CancellationToken cancellationToken = default)
     {
-        return Tables.LoadTableAsync(schemaName, tableName, limit, cancellationToken);
+        return Tables.LoadTableAsync(schemaName, tableName, limit, orderByColumn, orderDirection, cancellationToken);
+    }
+
+    public Task<IReadOnlyList<string>> LoadColumnsAsync(
+        string schemaName,
+        string tableName,
+        CancellationToken cancellationToken = default)
+    {
+        return Metadata.LoadColumnsAsync(schemaName, tableName, cancellationToken);
     }
 
     public Task<IReadOnlyList<IndexInfo>> LoadIndexesAsync(

@@ -52,6 +52,7 @@
                         </StackPanel>
                         <ListBox x:Name="SavedProfilesList"
                                  DisplayMemberPath="Name"
+                                 MouseDoubleClick="SavedProfilesList_MouseDoubleClick"
                                  SelectionChanged="SavedProfilesList_SelectionChanged" />
                     </DockPanel>
 

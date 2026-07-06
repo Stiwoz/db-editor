@@ -1,3 +1,5 @@
+using System.ComponentModel;
+using System.Globalization;
 using System.Data;
 using Probe.DbEditor.Models;
 using Probe.DbEditor.Security;
@@ -19,18 +21,39 @@ public sealed class TableDataService
         string schemaName,
         string tableName,
         int limit,
+        string? orderByColumn = null,
+        ListSortDirection? orderDirection = null,
         CancellationToken cancellationToken = default)
     {
+        var validatedOrderByColumn = await ValidateOrderColumnAsync(
+            schemaName,
+            tableName,
+            orderByColumn,
+            cancellationToken);
         var primaryKeys = await _metadata.LoadPrimaryKeyColumnsAsync(schemaName, tableName, cancellationToken);
-        var sql = $"SELECT * FROM {SqlIdentifier.QuoteQualified(schemaName, tableName)} LIMIT @limit";
+        var limitValue = Math.Max(1, limit);
+        var sql = BuildSelectSql(schemaName, tableName, validatedOrderByColumn, orderDirection, "@limit");
+        var displaySql = BuildSelectSql(
+            schemaName,
+            tableName,
+            validatedOrderByColumn,
+            orderDirection,
+            limitValue.ToString(CultureInfo.InvariantCulture));
         var rows = await _executor.ExecuteTableAsync(
             sql,
-            command => command.Parameters.AddWithValue("@limit", Math.Max(1, limit)),
+            command => command.Parameters.AddWithValue("@limit", limitValue),
             cancellationToken);
 
         rows.TableName = tableName;
         rows.AcceptChanges();
-        return new TableDataResult(schemaName, tableName, rows, primaryKeys);
+        return new TableDataResult(
+            schemaName,
+            tableName,
+            rows,
+            primaryKeys,
+            displaySql,
+            validatedOrderByColumn,
+            orderDirection);
     }
 
     public async Task<int> ApplyCellUpdateAsync(PendingCellEdit edit, CancellationToken cancellationToken = default)
@@ -69,5 +92,38 @@ public sealed class TableDataService
                 }
             },
             cancellationToken);
+    }
+
+    private async Task<string?> ValidateOrderColumnAsync(
+        string schemaName,
+        string tableName,
+        string? orderByColumn,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(orderByColumn))
+        {
+            return null;
+        }
+
+        var columns = await _metadata.LoadColumnsAsync(schemaName, tableName, cancellationToken);
+        return columns.FirstOrDefault(column => string.Equals(column, orderByColumn, StringComparison.OrdinalIgnoreCase))
+            ?? throw new InvalidOperationException($"Column '{orderByColumn}' does not exist on the selected table.");
+    }
+
+    private static string BuildSelectSql(
+        string schemaName,
+        string tableName,
+        string? orderByColumn,
+        ListSortDirection? orderDirection,
+        string limitExpression)
+    {
+        var sql = $"SELECT * FROM {SqlIdentifier.QuoteQualified(schemaName, tableName)}";
+        if (!string.IsNullOrWhiteSpace(orderByColumn))
+        {
+            var direction = orderDirection == ListSortDirection.Descending ? "DESC" : "ASC";
+            sql += $" ORDER BY {SqlIdentifier.Quote(orderByColumn)} {direction}";
+        }
+
+        return $"{sql} LIMIT {limitExpression}";
     }
 }

@@ -1,6 +1,8 @@
 using System.Collections.ObjectModel;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
+using System.Windows.Media;
 using Probe.DbEditor.Models;
 using Probe.DbEditor.Services;
 using Probe.DbEditor.Themes;
@@ -140,6 +142,19 @@ public partial class MainWindow : Window
 
     private async void Connect_Click(object sender, RoutedEventArgs e)
     {
+        await ConnectCurrentProfileAsync();
+    }
+
+    private async void SavedProfilesList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        if (SavedProfilesList.SelectedItem is not null)
+        {
+            await ConnectCurrentProfileAsync();
+        }
+    }
+
+    private async Task ConnectCurrentProfileAsync()
+    {
         try
         {
             ConnectionStatusText.Text = "Connecting...";
@@ -148,11 +163,9 @@ public partial class MainWindow : Window
             await session.OpenAsync();
 
             var view = new SessionView(session);
-            var tab = new TabItem
-            {
-                Header = profile.Name,
-                Content = view
-            };
+            var tab = new TabItem { Content = view };
+            tab.Header = CreateConnectionTabHeader(profile.Name, tab);
+            tab.PreviewMouseDown += ConnectionTab_PreviewMouseDown;
 
             ConnectionsTab.Items.Add(tab);
             ConnectionsTab.SelectedItem = tab;
@@ -162,6 +175,58 @@ public partial class MainWindow : Window
         {
             ConnectionStatusText.Text = ex.Message;
         }
+    }
+
+    private DockPanel CreateConnectionTabHeader(string title, TabItem tab)
+    {
+        var panel = new DockPanel { LastChildFill = false };
+        var closeButton = new Button
+        {
+            Content = "×",
+            Width = 22,
+            Height = 22,
+            Padding = new Thickness(0),
+            Margin = new Thickness(8, -2, 0, -2),
+            Background = Brushes.Transparent,
+            BorderBrush = Brushes.Transparent,
+            Foreground = FindResource("MutedTextBrush") as Brush ?? Brushes.Gray,
+            FontWeight = FontWeights.Bold,
+            ToolTip = "Close connection"
+        };
+        closeButton.Click += (_, e) =>
+        {
+            e.Handled = true;
+            CloseConnectionTab(tab);
+        };
+
+        panel.Children.Add(new TextBlock
+        {
+            Text = title,
+            VerticalAlignment = VerticalAlignment.Center
+        });
+        panel.Children.Add(closeButton);
+        return panel;
+    }
+
+    private void ConnectionTab_PreviewMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ChangedButton != MouseButton.Middle || sender is not TabItem tab)
+        {
+            return;
+        }
+
+        e.Handled = true;
+        CloseConnectionTab(tab);
+    }
+
+    private async void CloseConnectionTab(TabItem tab)
+    {
+        if (tab.Content is SessionView view)
+        {
+            await view.CloseAsync();
+        }
+
+        ConnectionsTab.Items.Remove(tab);
     }
 
     private void LoadProfile(ConnectionProfile profile)
