@@ -9,12 +9,13 @@
     Loaded="SessionView_Loaded">
     <Grid>
         <Grid.RowDefinitions>
-            <RowDefinition Height="40" />
+            <RowDefinition Height="50" />
             <RowDefinition Height="*" />
             <RowDefinition Height="160" />
         </Grid.RowDefinitions>
 
-        <Border Grid.Row="0" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1" Background="{StaticResource SurfaceBrush}"
+        <Border Grid.Row="0" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1"
+            Background="{StaticResource SurfaceBrush}"
             Padding="8">
             <DockPanel>
                 <TextBlock x:Name="SessionTitleText"
@@ -44,7 +45,8 @@
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
 
-            <Border Grid.Column="0" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,1,0" Background="{StaticResource SurfaceMutedBrush}">
+            <Border Grid.Column="0" BorderBrush="{StaticResource BorderBrush}"
+                BorderThickness="0,0,1,0" Background="{StaticResource SurfaceMutedBrush}">
                 <DockPanel>
                     <TextBlock DockPanel.Dock="Top" FontWeight="SemiBold" Margin="10" Text="Schemas" />
                     <TreeView x:Name="SchemaTree"
@@ -69,7 +71,8 @@
 
                 <TabItem Header="Indexes">
                     <DockPanel Margin="10">
-                        <Border DockPanel.Dock="Top" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1"
+                        <Border DockPanel.Dock="Top" BorderBrush="{StaticResource BorderBrush}"
+                            BorderThickness="0,0,0,1"
                             Padding="0,0,0,10" Margin="0,0,0,10">
                             <WrapPanel>
                                 <TextBlock VerticalAlignment="Center" Text="Name" Margin="0,0,6,0" />
@@ -138,6 +141,7 @@
                         <DataGrid x:Name="QueryResultGrid"
                             Grid.Row="2"
                             AutoGenerateColumns="True"
+                            AutoGeneratingColumn="ReadOnlyDataGrid_AutoGeneratingColumn"
                             IsReadOnly="True"
                             EnableRowVirtualization="True"
                             EnableColumnVirtualization="True" />
