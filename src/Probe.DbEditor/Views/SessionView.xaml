@@ -67,6 +67,7 @@
                         GridLinesVisibility="All"
                         AutoGeneratingColumn="TableDataGrid_AutoGeneratingColumn"
                         Sorting="TableDataGrid_Sorting"
+                        PreparingCellForEdit="TableDataGrid_PreparingCellForEdit"
                         CellEditEnding="TableDataGrid_CellEditEnding"
                         CurrentCellChanged="TableDataGrid_CurrentCellChanged" />
                 </TabItem>
@@ -115,11 +116,32 @@
                 </TabItem>
 
                 <TabItem Header="Overview">
-                    <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                    <DataGrid x:Name="OverviewColumnsGrid"
+                        AutoGenerateColumns="False"
+                        IsReadOnly="True"
+                        EnableRowVirtualization="True"
+                        EnableColumnVirtualization="True"
+                        HorizontalScrollBarVisibility="Auto"
                         VerticalScrollBarVisibility="Auto">
-                        <Canvas x:Name="OverviewCanvas" Width="1400" Height="900"
-                            Background="{StaticResource SurfaceMutedBrush}" />
-                    </ScrollViewer>
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="#" Binding="{Binding Position}" Width="60" />
+                            <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="180" />
+                            <DataGridTextColumn Header="Column Type" Binding="{Binding ColumnType}" Width="180" />
+                            <DataGridTextColumn Header="Data Type" Binding="{Binding DataType}" Width="130" />
+                            <DataGridTextColumn Header="Nullable" Binding="{Binding IsNullable}" Width="90" />
+                            <DataGridTextColumn Header="Default" Binding="{Binding DefaultValue}" Width="160" />
+                            <DataGridTextColumn Header="Char Length" Binding="{Binding CharacterMaximumLength}" Width="110" />
+                            <DataGridTextColumn Header="Precision" Binding="{Binding NumericPrecision}" Width="100" />
+                            <DataGridTextColumn Header="Scale" Binding="{Binding NumericScale}" Width="80" />
+                            <DataGridTextColumn Header="DateTime Precision" Binding="{Binding DateTimePrecision}" Width="140" />
+                            <DataGridTextColumn Header="Charset" Binding="{Binding CharacterSet}" Width="130" />
+                            <DataGridTextColumn Header="Collation" Binding="{Binding Collation}" Width="180" />
+                            <DataGridTextColumn Header="Key" Binding="{Binding Key}" Width="80" />
+                            <DataGridTextColumn Header="Extra" Binding="{Binding Extra}" Width="180" />
+                            <DataGridTextColumn Header="Comment" Binding="{Binding Comment}" Width="220" />
+                            <DataGridTextColumn Header="Generation Expression" Binding="{Binding GenerationExpression}" Width="240" />
+                        </DataGrid.Columns>
+                    </DataGrid>
                 </TabItem>
 
                 <TabItem Header="Query">

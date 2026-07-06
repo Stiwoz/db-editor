@@ -44,7 +44,7 @@ Rust remains viable for a custom-rendered UI, especially with egui or Slint, but
 - Query runner and query result grid.
 - Query editor syntax highlighting and completion for SQL keywords, schemas, tables, columns, and variables.
 - Per-connection query log.
-- Basic schema overview drawing from foreign keys.
+- Current-table column overview with type, default, nullability, collation, key, and extra metadata.
 
 ## Code Organization
 

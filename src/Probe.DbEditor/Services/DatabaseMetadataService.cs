@@ -60,6 +60,63 @@ public sealed class DatabaseMetadataService
         return ReadStringColumn(table, 0);
     }
 
+    public async Task<IReadOnlyList<ColumnInfo>> LoadColumnDetailsAsync(
+        string schemaName,
+        string tableName,
+        CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+            SELECT ORDINAL_POSITION,
+                   COLUMN_NAME,
+                   COLUMN_TYPE,
+                   DATA_TYPE,
+                   IS_NULLABLE,
+                   COLUMN_DEFAULT,
+                   CHARACTER_MAXIMUM_LENGTH,
+                   NUMERIC_PRECISION,
+                   NUMERIC_SCALE,
+                   DATETIME_PRECISION,
+                   CHARACTER_SET_NAME,
+                   COLLATION_NAME,
+                   COLUMN_KEY,
+                   EXTRA,
+                   COLUMN_COMMENT,
+                   GENERATION_EXPRESSION
+            FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = @schema AND TABLE_NAME = @table
+            ORDER BY ORDINAL_POSITION
+            """;
+
+        var table = await _executor.ExecuteTableAsync(
+            sql,
+            command =>
+            {
+                command.Parameters.AddWithValue("@schema", schemaName);
+                command.Parameters.AddWithValue("@table", tableName);
+            },
+            cancellationToken);
+
+        return table.Rows.Cast<DataRow>().Select(row => new ColumnInfo
+        {
+            Position = Convert.ToInt32(row["ORDINAL_POSITION"]),
+            Name = ReadString(row, "COLUMN_NAME"),
+            ColumnType = ReadString(row, "COLUMN_TYPE"),
+            DataType = ReadString(row, "DATA_TYPE"),
+            IsNullable = ReadString(row, "IS_NULLABLE"),
+            DefaultValue = ReadNullableLiteral(row, "COLUMN_DEFAULT"),
+            CharacterMaximumLength = ReadNullableInt64(row, "CHARACTER_MAXIMUM_LENGTH"),
+            NumericPrecision = ReadNullableInt64(row, "NUMERIC_PRECISION"),
+            NumericScale = ReadNullableInt64(row, "NUMERIC_SCALE"),
+            DateTimePrecision = ReadNullableInt64(row, "DATETIME_PRECISION"),
+            CharacterSet = ReadString(row, "CHARACTER_SET_NAME"),
+            Collation = ReadString(row, "COLLATION_NAME"),
+            Key = ReadString(row, "COLUMN_KEY"),
+            Extra = ReadString(row, "EXTRA"),
+            Comment = ReadString(row, "COLUMN_COMMENT"),
+            GenerationExpression = ReadString(row, "GENERATION_EXPRESSION")
+        }).ToList();
+    }
+
     public async Task<IReadOnlyList<string>> LoadPrimaryKeyColumnsAsync(
         string schemaName,
         string tableName,
@@ -157,32 +214,6 @@ public sealed class DatabaseMetadataService
         await _executor.ExecuteNonQueryAsync(sql, _ => { }, cancellationToken);
     }
 
-    public async Task<IReadOnlyList<ForeignKeyEdge>> LoadForeignKeysAsync(
-        string schemaName,
-        CancellationToken cancellationToken = default)
-    {
-        const string sql = """
-            SELECT CONSTRAINT_NAME, TABLE_NAME, COLUMN_NAME, REFERENCED_TABLE_NAME, REFERENCED_COLUMN_NAME
-            FROM information_schema.KEY_COLUMN_USAGE
-            WHERE TABLE_SCHEMA = @schema AND REFERENCED_TABLE_NAME IS NOT NULL
-            ORDER BY TABLE_NAME, CONSTRAINT_NAME, ORDINAL_POSITION
-            """;
-
-        var table = await _executor.ExecuteTableAsync(
-            sql,
-            command => command.Parameters.AddWithValue("@schema", schemaName),
-            cancellationToken);
-
-        return table.Rows.Cast<DataRow>().Select(row => new ForeignKeyEdge
-        {
-            ConstraintName = Convert.ToString(row["CONSTRAINT_NAME"]) ?? "",
-            TableName = Convert.ToString(row["TABLE_NAME"]) ?? "",
-            ColumnName = Convert.ToString(row["COLUMN_NAME"]) ?? "",
-            ReferencedTableName = Convert.ToString(row["REFERENCED_TABLE_NAME"]) ?? "",
-            ReferencedColumnName = Convert.ToString(row["REFERENCED_COLUMN_NAME"]) ?? ""
-        }).ToList();
-    }
-
     private static IReadOnlyList<string> ReadStringColumn(DataTable table, int columnIndex)
     {
         return table.Rows
@@ -190,5 +221,20 @@ public sealed class DatabaseMetadataService
             .Select(row => Convert.ToString(row[columnIndex]) ?? "")
             .Where(value => !string.IsNullOrWhiteSpace(value))
             .ToList();
+    }
+
+    private static string ReadString(DataRow row, string columnName)
+    {
+        return row[columnName] is DBNull ? "" : Convert.ToString(row[columnName]) ?? "";
+    }
+
+    private static string ReadNullableLiteral(DataRow row, string columnName)
+    {
+        return row[columnName] is DBNull ? "NULL" : Convert.ToString(row[columnName]) ?? "";
+    }
+
+    private static long? ReadNullableInt64(DataRow row, string columnName)
+    {
+        return row[columnName] is DBNull ? null : Convert.ToInt64(row[columnName]);
     }
 }

@@ -64,6 +64,14 @@ public sealed class DatabaseSession : IAsyncDisposable
         return Metadata.LoadColumnsAsync(schemaName, tableName, cancellationToken);
     }
 
+    public Task<IReadOnlyList<ColumnInfo>> LoadColumnDetailsAsync(
+        string schemaName,
+        string tableName,
+        CancellationToken cancellationToken = default)
+    {
+        return Metadata.LoadColumnDetailsAsync(schemaName, tableName, cancellationToken);
+    }
+
     public Task<IReadOnlyList<IndexInfo>> LoadIndexesAsync(
         string schemaName,
         string tableName,
@@ -90,13 +98,6 @@ public sealed class DatabaseSession : IAsyncDisposable
         CancellationToken cancellationToken = default)
     {
         return Metadata.DropIndexAsync(schemaName, tableName, indexName, cancellationToken);
-    }
-
-    public Task<IReadOnlyList<ForeignKeyEdge>> LoadForeignKeysAsync(
-        string schemaName,
-        CancellationToken cancellationToken = default)
-    {
-        return Metadata.LoadForeignKeysAsync(schemaName, cancellationToken);
     }
 
     public Task<int> ApplyCellUpdateAsync(PendingCellEdit edit, CancellationToken cancellationToken = default)

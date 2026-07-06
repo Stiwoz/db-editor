@@ -1,16 +1,16 @@
 <Window x:Class="Probe.DbEditor.MainWindow"
-        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        mc:Ignorable="d"
-        Title="Probe DB Editor"
-        Icon="Assets/app-icon.ico"
-        Width="1280"
-        Height="820"
-        MinWidth="1040"
-        MinHeight="700"
-        Loaded="Window_Loaded">
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    Title="Probe DB Editor"
+    Icon="Assets/app-icon.ico"
+    Width="1280"
+    Height="820"
+    MinWidth="1040"
+    MinHeight="700"
+    Loaded="Window_Loaded">
     <Window.Resources>
         <Style TargetType="TextBox" BasedOn="{StaticResource BaseTextBoxStyle}">
             <Setter Property="Margin" Value="0,3,0,9" />
@@ -31,10 +31,6 @@
     </Window.Resources>
 
     <DockPanel>
-        <Border DockPanel.Dock="Top" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1" Background="{StaticResource SurfaceBrush}" Padding="12,8">
-            <TextBlock FontSize="16" FontWeight="SemiBold" Text="Probe DB Editor" />
-        </Border>
-
         <TabControl x:Name="ConnectionsTab">
             <TabItem x:Name="ConnectionTab" Header="Connections">
                 <Grid Margin="16">
@@ -45,18 +41,21 @@
                     </Grid.ColumnDefinitions>
 
                     <DockPanel Grid.Column="0">
-                        <TextBlock DockPanel.Dock="Top" FontWeight="SemiBold" Margin="0,0,0,8" Text="Saved Connections" />
-                        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,12,0,0">
+                        <TextBlock DockPanel.Dock="Top" FontWeight="SemiBold" Margin="0,0,0,8"
+                            Text="Saved Connections" />
+                        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal"
+                            Margin="0,12,0,0">
                             <Button Content="New" Click="NewProfile_Click" />
                             <Button Content="Delete" Click="DeleteProfile_Click" />
                         </StackPanel>
                         <ListBox x:Name="SavedProfilesList"
-                                 DisplayMemberPath="Name"
-                                 MouseDoubleClick="SavedProfilesList_MouseDoubleClick"
-                                 SelectionChanged="SavedProfilesList_SelectionChanged" />
+                            DisplayMemberPath="Name"
+                            MouseDoubleClick="SavedProfilesList_MouseDoubleClick"
+                            SelectionChanged="SavedProfilesList_SelectionChanged" />
                     </DockPanel>
 
-                    <Border Grid.Column="2" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Background="{StaticResource SurfaceBrush}" Padding="16">
+                    <Border Grid.Column="2" BorderBrush="{StaticResource BorderBrush}"
+                        BorderThickness="1" Background="{StaticResource SurfaceBrush}" Padding="16">
                         <ScrollViewer VerticalScrollBarVisibility="Auto">
                             <StackPanel MaxWidth="720" HorizontalAlignment="Left">
                                 <TextBlock FontWeight="SemiBold" FontSize="14" Text="Connection" />
@@ -65,7 +64,8 @@
                                 <TextBox x:Name="ProfileNameTextBox" />
 
                                 <TextBlock Text="Mode" />
-                                <ComboBox x:Name="ProtocolCombo" SelectionChanged="ProtocolCombo_SelectionChanged" />
+                                <ComboBox x:Name="ProtocolCombo"
+                                    SelectionChanged="ProtocolCombo_SelectionChanged" />
 
                                 <Grid>
                                     <Grid.ColumnDefinitions>
@@ -106,9 +106,9 @@
                                         <TextBlock Text="Database password" />
                                         <PasswordBox x:Name="PasswordBox" />
                                         <CheckBox x:Name="SavePasswordCheckBox"
-                                                  Content="Save password"
-                                                  ToolTip="Protects the saved password with Windows DPAPI for the current Windows user."
-                                                  Margin="0,-4,0,9" />
+                                            Content="Save password"
+                                            ToolTip="Protects the saved password with Windows DPAPI for the current Windows user."
+                                            Margin="0,-4,0,9" />
                                     </StackPanel>
                                 </Grid>
 
@@ -118,7 +118,8 @@
                                 <TextBlock Text="Database TLS mode" />
                                 <ComboBox x:Name="TlsModeCombo" />
 
-                                <GroupBox x:Name="SshPanel" Header="SSH Tunnel" Visibility="Collapsed" Margin="0,8,0,12" Padding="12">
+                                <GroupBox x:Name="SshPanel" Header="SSH Tunnel"
+                                    Visibility="Collapsed" Margin="0,8,0,12" Padding="12">
                                     <StackPanel>
                                         <Grid>
                                             <Grid.ColumnDefinitions>
@@ -150,9 +151,9 @@
                                                 <TextBlock Text="SSH password" />
                                                 <PasswordBox x:Name="SshPasswordBox" />
                                                 <CheckBox x:Name="SaveSshPasswordCheckBox"
-                                                          Content="Save SSH password"
-                                                          ToolTip="Protects the saved SSH password with Windows DPAPI for the current Windows user."
-                                                          Margin="0,-4,0,9" />
+                                                    Content="Save SSH password"
+                                                    ToolTip="Protects the saved SSH password with Windows DPAPI for the current Windows user."
+                                                    Margin="0,-4,0,9" />
                                             </StackPanel>
                                         </Grid>
 
@@ -162,7 +163,8 @@
                                         <TextBlock Text="Private key passphrase" />
                                         <PasswordBox x:Name="SshKeyPassphraseBox" />
 
-                                        <TextBlock Text="Expected SSH host key fingerprint (SHA256 or MD5)" />
+                                        <TextBlock
+                                            Text="Expected SSH host key fingerprint (SHA256 or MD5)" />
                                         <TextBox x:Name="SshHostKeyFingerprintTextBox" />
 
                                         <Grid>
@@ -189,9 +191,9 @@
                                 </StackPanel>
 
                                 <TextBlock x:Name="ConnectionStatusText"
-                                           Margin="0,12,0,0"
-                                           TextWrapping="Wrap"
-                                           Foreground="{StaticResource MutedTextBrush}" />
+                                    Margin="0,12,0,0"
+                                    TextWrapping="Wrap"
+                                    Foreground="{StaticResource MutedTextBrush}" />
                             </StackPanel>
                         </ScrollViewer>
                     </Border>

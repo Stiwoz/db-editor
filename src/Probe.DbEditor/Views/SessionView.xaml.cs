@@ -6,6 +6,7 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Data;
 using System.Windows.Input;
+using System.Windows.Media;
 using System.Windows.Threading;
 using ICSharpCode.AvalonEdit.CodeCompletion;
 using Probe.DbEditor.Models;
@@ -16,10 +17,14 @@ namespace Probe.DbEditor.Views;
 
 public partial class SessionView : UserControl
 {
+    private static readonly Brush EditingTextBackground = new SolidColorBrush(Color.FromRgb(226, 223, 208));
+    private static readonly Brush EditingTextForeground = new SolidColorBrush(Color.FromRgb(47, 32, 45));
+    private static readonly Brush EditingTextBorder = new SolidColorBrush(Color.FromRgb(159, 95, 66));
+    private static readonly Brush EditingTextSelection = new SolidColorBrush(Color.FromRgb(195, 132, 98));
     private readonly DatabaseSession _session;
-    private readonly SchemaOverviewRenderer _overviewRenderer = new();
     private readonly SqlCompletionService _completionService = new();
     private readonly ObservableCollection<PendingCellEdit> _pendingEdits = [];
+    private static readonly Style EditingTextBoxStyle = CreateEditingTextBoxStyle();
     private TableDataResult? _currentTable;
     private CompletionWindow? _completionWindow;
     private string? _orderByColumn;
@@ -98,6 +103,11 @@ public partial class SessionView : UserControl
                     : UpdateSourceTrigger.Default,
                 ValidatesOnExceptions = true
             };
+
+            if (bindingMode == BindingMode.TwoWay && boundColumn is DataGridTextColumn textColumn)
+            {
+                textColumn.EditingElementStyle = EditingTextBoxStyle;
+            }
         }
     }
 
@@ -141,6 +151,17 @@ public partial class SessionView : UserControl
         }
 
         _pendingEditCandidate = new PendingEditCandidate(rowView.Row, columnName);
+    }
+
+    private void TableDataGrid_PreparingCellForEdit(object sender, DataGridPreparingCellForEditEventArgs e)
+    {
+        if (e.EditingElement is not TextBox textBox)
+        {
+            return;
+        }
+
+        ApplyEditingTextBoxVisuals(textBox);
+        textBox.Dispatcher.BeginInvoke(() => ApplyEditingTextBoxVisuals(textBox), DispatcherPriority.Loaded);
     }
 
     private async void TableDataGrid_CurrentCellChanged(object sender, EventArgs e)
@@ -302,7 +323,7 @@ public partial class SessionView : UserControl
             WorkspaceTabs.SelectedItem = ContentTab;
             PrepopulateQueryEditorIfPristine(_currentTable.SelectSql + ";");
             await LoadIndexesAsync(schemaName, tableName);
-            await DrawOverviewAsync(schemaName);
+            await LoadColumnOverviewAsync(schemaName, tableName);
 
             var editState = _currentTable.PrimaryKeyColumns.Count == 0
                 ? "no primary key; editing disabled"
@@ -408,11 +429,9 @@ public partial class SessionView : UserControl
         }
     }
 
-    private async Task DrawOverviewAsync(string schemaName)
+    private async Task LoadColumnOverviewAsync(string schemaName, string tableName)
     {
-        var tables = await _session.LoadTablesAsync(schemaName);
-        var foreignKeys = await _session.LoadForeignKeysAsync(schemaName);
-        _overviewRenderer.Render(OverviewCanvas, tables, foreignKeys);
+        OverviewColumnsGrid.ItemsSource = await _session.LoadColumnDetailsAsync(schemaName, tableName);
     }
 
     private int ParseLimit()
@@ -590,6 +609,64 @@ public partial class SessionView : UserControl
             _ => null
         };
         binding?.UpdateSource();
+    }
+
+    private static Style CreateEditingTextBoxStyle()
+    {
+        var style = new Style(typeof(TextBox));
+        style.Setters.Add(new Setter(Control.BackgroundProperty, EditingTextBackground));
+        style.Setters.Add(new Setter(Control.ForegroundProperty, EditingTextForeground));
+        style.Setters.Add(new Setter(Control.BorderBrushProperty, EditingTextBorder));
+        style.Setters.Add(new Setter(Control.BorderThicknessProperty, new Thickness(1)));
+        style.Setters.Add(new Setter(Control.PaddingProperty, new Thickness(4, 2, 4, 2)));
+        style.Setters.Add(new Setter(TextBox.CaretBrushProperty, EditingTextForeground));
+        style.Setters.Add(new Setter(TextBoxBase.SelectionBrushProperty, EditingTextSelection));
+        style.Setters.Add(new Setter(TextBoxBase.SelectionOpacityProperty, 0.55));
+        style.Setters.Add(new Setter(Control.TemplateProperty, CreateEditingTextBoxTemplate()));
+        style.Setters.Add(new EventSetter(UIElement.PreviewMouseLeftButtonDownEvent, new MouseButtonEventHandler(EditingTextBox_PreviewMouseLeftButtonDown)));
+        return style;
+    }
+
+    private static ControlTemplate CreateEditingTextBoxTemplate()
+    {
+        var border = new FrameworkElementFactory(typeof(Border));
+        border.SetValue(Border.BackgroundProperty, new TemplateBindingExtension(Control.BackgroundProperty));
+        border.SetValue(Border.BorderBrushProperty, new TemplateBindingExtension(Control.BorderBrushProperty));
+        border.SetValue(Border.BorderThicknessProperty, new TemplateBindingExtension(Control.BorderThicknessProperty));
+        border.SetValue(Border.PaddingProperty, new TemplateBindingExtension(Control.PaddingProperty));
+
+        var contentHost = new FrameworkElementFactory(typeof(ScrollViewer), "PART_ContentHost");
+        contentHost.SetValue(ScrollViewer.BackgroundProperty, Brushes.Transparent);
+        border.AppendChild(contentHost);
+
+        return new ControlTemplate(typeof(TextBox))
+        {
+            VisualTree = border
+        };
+    }
+
+    private static void ApplyEditingTextBoxVisuals(TextBox textBox)
+    {
+        textBox.Background = EditingTextBackground;
+        textBox.Foreground = EditingTextForeground;
+        textBox.BorderBrush = EditingTextBorder;
+        textBox.BorderThickness = new Thickness(1);
+        textBox.CaretBrush = EditingTextForeground;
+        textBox.SelectionBrush = EditingTextSelection;
+        textBox.SelectionOpacity = 0.55;
+        textBox.Padding = new Thickness(4, 2, 4, 2);
+    }
+
+    private static void EditingTextBox_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ClickCount < 3 || sender is not TextBox textBox)
+        {
+            return;
+        }
+
+        textBox.Focus();
+        textBox.SelectAll();
+        e.Handled = true;
     }
 
     private static object? NormalizeDbValue(object? value)
