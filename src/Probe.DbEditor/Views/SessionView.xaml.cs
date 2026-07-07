@@ -17,7 +17,7 @@ namespace Probe.DbEditor.Views;
 
 public partial class SessionView : UserControl
 {
-    private const int GridAppendBatchSize = 20;
+    private const int GridAppendBatchSize = 8;
     private static readonly Brush EditingTextBackground = new SolidColorBrush(Color.FromRgb(226, 223, 208));
     private static readonly Brush EditingTextForeground = new SolidColorBrush(Color.FromRgb(47, 32, 45));
     private static readonly Brush EditingTextBorder = new SolidColorBrush(Color.FromRgb(159, 95, 66));
