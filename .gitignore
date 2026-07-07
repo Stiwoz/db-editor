@@ -1,6 +1,7 @@
 bin/
 obj/
 .nuget/
+artifacts/
 
 src/**/bin/
 src/**/obj/

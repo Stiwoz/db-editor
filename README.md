@@ -71,10 +71,51 @@ Rust remains viable for a custom-rendered UI, especially with egui or Slint, but
 
 ## Build
 
+Debug/development build:
+
 ```powershell
 dotnet restore .\src\Probe.DbEditor\Probe.DbEditor.csproj
 dotnet build .\src\Probe.DbEditor\Probe.DbEditor.csproj
 dotnet run --project .\src\Probe.DbEditor\Probe.DbEditor.csproj
 ```
+
+Production portable Windows executable:
+
+```powershell
+dotnet publish .\src\Probe.DbEditor\Probe.DbEditor.csproj -c Release
+```
+
+Use `publish`, not `build`, for the portable executable. The normal `bin\Release\...\win-x64` build folder contains intermediate DLLs and runtime files; that folder is not the distributable artifact.
+
+The Release publish defaults to a self-contained single-file `win-x64` executable at:
+
+```text
+.\artifacts\portable\win-x64\Probe.DbEditor.exe
+```
+
+That executable includes the .NET Windows Desktop runtime, so it does not require a separate .NET install on the target machine. For another Windows architecture, override the runtime identifier, for example:
+
+```powershell
+dotnet publish .\src\Probe.DbEditor\Probe.DbEditor.csproj -c Release -r win-arm64
+```
+
+The `win-arm64` executable is published to:
+
+```text
+.\artifacts\portable\win-arm64\Probe.DbEditor.exe
+```
+
+## Windows Publisher Warning
+
+The executable includes product, company, version, description, and icon metadata. Windows still shows `Unknown publisher` until the executable is Authenticode-signed with a trusted code-signing certificate.
+
+With a certificate installed in the current user's certificate store, sign the published executable with `signtool` from the Windows SDK:
+
+```powershell
+signtool sign /n "Certificate Subject Name" /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 .\artifacts\portable\win-x64\Probe.DbEditor.exe
+signtool verify /pa .\artifacts\portable\win-x64\Probe.DbEditor.exe
+```
+
+Without a trusted signing certificate, the publisher warning is expected for first-run/downloaded builds.
 
 NuGet packages are restored into `.nuget/packages` inside the workspace.
