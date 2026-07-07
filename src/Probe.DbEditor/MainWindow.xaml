@@ -60,7 +60,6 @@
                         BorderThickness="1" Background="{StaticResource SurfaceBrush}" Padding="16">
                         <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="16">
                             <StackPanel MaxWidth="720" HorizontalAlignment="Left">
-                                <TextBlock FontWeight="SemiBold" FontSize="14" Text="Connection" />
 
                                 <TextBlock Text="Profile name" />
                                 <TextBox x:Name="ProfileNameTextBox" />
