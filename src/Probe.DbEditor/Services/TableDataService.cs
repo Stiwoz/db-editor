@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Globalization;
 using System.Data;
+using System.Runtime.CompilerServices;
 using Probe.DbEditor.Models;
 using Probe.DbEditor.Security;
 
@@ -8,6 +9,8 @@ namespace Probe.DbEditor.Services;
 
 public sealed class TableDataService
 {
+    public const int TableLoadChunkSize = 100;
+
     private readonly IDatabaseCommandExecutor _executor;
     private readonly DatabaseMetadataService _metadata;
 
@@ -25,35 +28,122 @@ public sealed class TableDataService
         ListSortDirection? orderDirection = null,
         CancellationToken cancellationToken = default)
     {
+        DataTable? rows = null;
+        TableDataChunkResult? lastChunk = null;
+        await foreach (var chunk in StreamTableAsync(
+                           schemaName,
+                           tableName,
+                           limit,
+                           orderByColumn,
+                           orderDirection,
+                           cancellationToken))
+        {
+            lastChunk = chunk;
+            rows ??= CreateResultTable(tableName, chunk.Rows);
+            AppendRows(rows, chunk.Rows);
+        }
+
+        if (lastChunk is null || rows is null)
+        {
+            throw new OperationCanceledException(cancellationToken);
+        }
+
+        return new TableDataResult(
+            lastChunk.SchemaName,
+            lastChunk.TableName,
+            rows,
+            lastChunk.PrimaryKeyColumns,
+            lastChunk.SelectSql,
+            lastChunk.OrderByColumn,
+            lastChunk.OrderDirection);
+    }
+
+    public async IAsyncEnumerable<TableDataChunkResult> StreamTableAsync(
+        string schemaName,
+        string tableName,
+        int limit,
+        string? orderByColumn = null,
+        ListSortDirection? orderDirection = null,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
         var validatedOrderByColumn = await ValidateOrderColumnAsync(
             schemaName,
             tableName,
             orderByColumn,
-            cancellationToken);
-        var primaryKeys = await _metadata.LoadPrimaryKeyColumnsAsync(schemaName, tableName, cancellationToken);
+            cancellationToken).ConfigureAwait(false);
+        var primaryKeys = await _metadata.LoadPrimaryKeyColumnsAsync(
+            schemaName,
+            tableName,
+            cancellationToken).ConfigureAwait(false);
         var limitValue = Math.Max(1, limit);
-        var sql = BuildSelectSql(schemaName, tableName, validatedOrderByColumn, orderDirection, "@limit");
         var displaySql = BuildSelectSql(
             schemaName,
             tableName,
             validatedOrderByColumn,
             orderDirection,
             limitValue.ToString(CultureInfo.InvariantCulture));
-        var rows = await _executor.ExecuteTableAsync(
-            sql,
-            command => command.Parameters.AddWithValue("@limit", limitValue),
-            cancellationToken);
 
+        for (var offset = 0; offset < limitValue; offset += TableLoadChunkSize)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var chunkLimit = Math.Min(TableLoadChunkSize, limitValue - offset);
+            var sql = BuildSelectSql(
+                schemaName,
+                tableName,
+                validatedOrderByColumn,
+                orderDirection,
+                "@limit",
+                "@offset");
+            var chunk = await _executor.ExecuteTableAsync(
+                sql,
+                command =>
+                {
+                    command.Parameters.AddWithValue("@limit", chunkLimit);
+                    command.Parameters.AddWithValue("@offset", offset);
+                },
+                cancellationToken).ConfigureAwait(false);
+
+            chunk.TableName = tableName;
+            chunk.AcceptChanges();
+
+            if (chunk.Rows.Count > 0 || offset == 0)
+            {
+                yield return new TableDataChunkResult(
+                    schemaName,
+                    tableName,
+                    chunk,
+                    primaryKeys,
+                    displaySql,
+                    validatedOrderByColumn,
+                    orderDirection,
+                    offset,
+                    chunkLimit);
+            }
+
+            if (chunk.Rows.Count < chunkLimit)
+            {
+                break;
+            }
+        }
+    }
+
+    private static DataTable CreateResultTable(string tableName, DataTable chunk)
+    {
+        var rows = chunk.Clone();
         rows.TableName = tableName;
-        rows.AcceptChanges();
-        return new TableDataResult(
-            schemaName,
-            tableName,
-            rows,
-            primaryKeys,
-            displaySql,
-            validatedOrderByColumn,
-            orderDirection);
+        return rows;
+    }
+
+    private static void AppendRows(DataTable rows, DataTable chunk)
+    {
+        foreach (DataRow row in chunk.Rows)
+        {
+            var appended = rows.NewRow();
+            appended.ItemArray = row.ItemArray;
+            rows.Rows.Add(appended);
+            appended.AcceptChanges();
+        }
     }
 
     public async Task<int> ApplyCellUpdateAsync(PendingCellEdit edit, CancellationToken cancellationToken = default)
@@ -105,7 +195,7 @@ public sealed class TableDataService
             return null;
         }
 
-        var columns = await _metadata.LoadColumnsAsync(schemaName, tableName, cancellationToken);
+        var columns = await _metadata.LoadColumnsAsync(schemaName, tableName, cancellationToken).ConfigureAwait(false);
         return columns.FirstOrDefault(column => string.Equals(column, orderByColumn, StringComparison.OrdinalIgnoreCase))
             ?? throw new InvalidOperationException($"Column '{orderByColumn}' does not exist on the selected table.");
     }
@@ -115,7 +205,8 @@ public sealed class TableDataService
         string tableName,
         string? orderByColumn,
         ListSortDirection? orderDirection,
-        string limitExpression)
+        string limitExpression,
+        string? offsetExpression = null)
     {
         var sql = $"SELECT * FROM {SqlIdentifier.QuoteQualified(schemaName, tableName)}";
         if (!string.IsNullOrWhiteSpace(orderByColumn))
@@ -124,6 +215,12 @@ public sealed class TableDataService
             sql += $" ORDER BY {SqlIdentifier.Quote(orderByColumn)} {direction}";
         }
 
-        return $"{sql} LIMIT {limitExpression}";
+        sql += $" LIMIT {limitExpression}";
+        if (!string.IsNullOrWhiteSpace(offsetExpression))
+        {
+            sql += $" OFFSET {offsetExpression}";
+        }
+
+        return sql;
     }
 }

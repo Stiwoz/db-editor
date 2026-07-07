@@ -22,6 +22,12 @@
     <None Include="..\..\src\Probe.DbEditor\Themes\DarkTheme.xaml"
         Link="Fixtures\DarkTheme.xaml"
         CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\src\Probe.DbEditor\MainWindow.xaml"
+        Link="Fixtures\MainWindow.xaml"
+        CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\src\Probe.DbEditor\MainWindow.xaml.cs"
+        Link="Fixtures\MainWindow.xaml.cs"
+        CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

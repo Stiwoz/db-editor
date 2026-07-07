@@ -17,6 +17,7 @@ namespace Probe.DbEditor.Views;
 
 public partial class SessionView : UserControl
 {
+    private const int GridAppendBatchSize = 20;
     private static readonly Brush EditingTextBackground = new SolidColorBrush(Color.FromRgb(226, 223, 208));
     private static readonly Brush EditingTextForeground = new SolidColorBrush(Color.FromRgb(47, 32, 45));
     private static readonly Brush EditingTextBorder = new SolidColorBrush(Color.FromRgb(159, 95, 66));
@@ -34,6 +35,12 @@ public partial class SessionView : UserControl
     private bool _isCapturingEdit;
     private bool _isUpdatingQueryEditor;
     private bool _queryTextEditedByUser;
+    private bool _suppressSchemaSelectionChanged;
+    private CancellationTokenSource? _tableLoadCancellation;
+    private int _tableLoadVersion;
+    private CancellationTokenSource? _queryCancellation;
+    private int _queryRunVersion;
+    private int _runningOperationCount;
 
     public SessionView(DatabaseSession session)
     {
@@ -43,10 +50,19 @@ public partial class SessionView : UserControl
         PendingEditsGrid.ItemsSource = _pendingEdits;
         QueryLogGrid.ItemsSource = _session.QueryLog;
         ConfigureQueryEditor();
+        _pendingEdits.CollectionChanged += (_, _) => UpdatePendingEditButtons();
+        DeferEditsToggle.Checked += (_, _) => UpdatePendingEditButtons();
+        DeferEditsToggle.Unchecked += (_, _) => UpdatePendingEditButtons();
+        UpdatePendingEditButtons();
+        UpdateTopBarOperationState();
+        SetTableEmptyState(false);
     }
 
     public async ValueTask CloseAsync()
     {
+        _tableLoadCancellation?.Cancel();
+        _queryRunVersion++;
+        _queryCancellation?.Cancel();
         await _session.DisposeAsync();
     }
 
@@ -63,11 +79,16 @@ public partial class SessionView : UserControl
 
     private async void Refresh_Click(object sender, RoutedEventArgs e)
     {
-        await RefreshSchemasAsync();
+        await RefreshSchemasAsync(reloadSelectedTable: true);
     }
 
     private async void SchemaTree_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
     {
+        if (_suppressSchemaSelectionChanged)
+        {
+            return;
+        }
+
         if (SchemaTree.SelectedItem is TreeViewItem { Tag: TreeNodeInfo { Kind: TreeNodeKind.Table } node })
         {
             await LoadTableAsync(node.SchemaName, node.TableName);
@@ -192,6 +213,12 @@ public partial class SessionView : UserControl
 
     private void RevertPending_Click(object sender, RoutedEventArgs e)
     {
+        if (!CanReviewPendingEdits())
+        {
+            SetStatus("No pending edits to revert.");
+            return;
+        }
+
         foreach (var row in _pendingEdits.Select(edit => edit.Row).Distinct().ToList())
         {
             row.RejectChanges();
@@ -211,6 +238,7 @@ public partial class SessionView : UserControl
 
         try
         {
+            using var running = BeginRunningOperation();
             var columns = IndexColumnsTextBox.Text
                 .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                 .ToList();
@@ -239,6 +267,7 @@ public partial class SessionView : UserControl
 
         try
         {
+            using var running = BeginRunningOperation();
             await _session.DropIndexAsync(_currentTable.SchemaName, _currentTable.TableName, index.IndexName);
             await LoadIndexesAsync(_currentTable.SchemaName, _currentTable.TableName);
             SetStatus("Index dropped.");
@@ -251,35 +280,96 @@ public partial class SessionView : UserControl
 
     private async void RunQuery_Click(object sender, RoutedEventArgs e)
     {
+        if (_queryCancellation is not null)
+        {
+            return;
+        }
+
+        var cancellation = new CancellationTokenSource();
+        _queryCancellation = cancellation;
+        var queryVersion = ++_queryRunVersion;
+        SetQueryRunning(true);
+        using var running = BeginRunningOperation();
+
         try
         {
             QueryStatusText.Text = "Running...";
-            var result = await _session.RunSqlAsync(QueryEditor.Text);
+            await Dispatcher.Yield(DispatcherPriority.Background);
+            var result = await _session.RunSqlAsync(QueryEditor.Text, cancellation.Token);
+            if (!IsCurrentQueryRun(queryVersion, cancellation))
+            {
+                if (cancellation.IsCancellationRequested)
+                {
+                    QueryStatusText.Text = "Query stopped.";
+                }
+
+                return;
+            }
+
             QueryResultGrid.ItemsSource = result.Rows.DefaultView;
             QueryStatusText.Text = result.Rows.Rows.Count > 0
                 ? $"{result.Rows.Rows.Count} row(s)"
                 : $"{result.RowsAffected} affected row(s)";
         }
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+        {
+            QueryStatusText.Text = "Query stopped.";
+        }
         catch (Exception ex)
         {
+            if (!IsCurrentQueryRun(queryVersion, cancellation) || cancellation.IsCancellationRequested)
+            {
+                QueryStatusText.Text = "Query stopped.";
+                return;
+            }
+
             QueryStatusText.Text = ex.Message;
+        }
+        finally
+        {
+            ClearTopBarResultSummary();
+            if (ReferenceEquals(_queryCancellation, cancellation))
+            {
+                _queryCancellation = null;
+            }
+
+            SetQueryRunning(false);
+            cancellation.Dispose();
         }
     }
 
-    private async Task RefreshSchemasAsync()
+    private void StopQuery_Click(object sender, RoutedEventArgs e)
     {
+        if (_queryCancellation is null)
+        {
+            return;
+        }
+
+        QueryStatusText.Text = "Stopping...";
+        _queryRunVersion++;
+        _queryCancellation.Cancel();
+    }
+
+    private async Task RefreshSchemasAsync(bool reloadSelectedTable = false)
+    {
+        using var running = BeginRunningOperation();
+        var tableToReload = reloadSelectedTable ? CaptureSelectedTableForRefresh() : null;
+
         try
         {
             SetStatus("Loading schemas...");
             SchemaTree.Items.Clear();
             var schemas = await _session.LoadSchemasAsync();
+            TreeViewItem? tableItemToReselect = null;
             foreach (var schema in schemas)
             {
+                var matchesReloadSchema = tableToReload is not null &&
+                    string.Equals(schema, tableToReload.SchemaName, StringComparison.OrdinalIgnoreCase);
                 var schemaItem = new TreeViewItem
                 {
                     Header = schema,
                     Tag = new TreeNodeInfo(TreeNodeKind.Schema, schema, ""),
-                    IsExpanded = IsDefaultSchema(schema)
+                    IsExpanded = IsDefaultSchema(schema) || matchesReloadSchema
                 };
 
                 _completionService.AddSchema(schema);
@@ -287,21 +377,79 @@ public partial class SessionView : UserControl
                 foreach (var table in tables)
                 {
                     _completionService.AddTable(schema, table);
-                    schemaItem.Items.Add(new TreeViewItem
+                    var tableItem = new TreeViewItem
                     {
                         Header = table,
                         Tag = new TreeNodeInfo(TreeNodeKind.Table, schema, table)
-                    });
+                    };
+                    if (matchesReloadSchema &&
+                        string.Equals(table, tableToReload!.TableName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        tableItemToReselect = tableItem;
+                    }
+
+                    schemaItem.Items.Add(tableItem);
                 }
 
                 SchemaTree.Items.Add(schemaItem);
             }
 
             SetStatus($"Loaded {schemas.Count} schema(s).");
+            if (tableToReload is null)
+            {
+                return;
+            }
+
+            if (tableItemToReselect is null)
+            {
+                SetStatus($"Loaded {schemas.Count} schema(s). Previously selected table no longer exists.");
+                return;
+            }
+
+            SelectSchemaTreeItem(tableItemToReselect);
+            await LoadTableAsync(
+                tableToReload.SchemaName,
+                tableToReload.TableName,
+                tableToReload.OrderByColumn,
+                tableToReload.OrderDirection);
         }
         catch (Exception ex)
         {
             SetStatus(ex.Message);
+        }
+    }
+
+    private RefreshTableSelection? CaptureSelectedTableForRefresh()
+    {
+        if (SchemaTree.SelectedItem is TreeViewItem { Tag: TreeNodeInfo { Kind: TreeNodeKind.Table } node })
+        {
+            return new RefreshTableSelection(
+                node.SchemaName,
+                node.TableName,
+                _orderByColumn,
+                _orderDirection);
+        }
+
+        return _currentTable is null
+            ? null
+            : new RefreshTableSelection(
+                _currentTable.SchemaName,
+                _currentTable.TableName,
+                _orderByColumn,
+                _orderDirection);
+    }
+
+    private void SelectSchemaTreeItem(TreeViewItem item)
+    {
+        _suppressSchemaSelectionChanged = true;
+        try
+        {
+            item.IsSelected = true;
+            item.BringIntoView();
+        }
+        finally
+        {
+            _suppressSchemaSelectionChanged = false;
         }
     }
 
@@ -311,28 +459,107 @@ public partial class SessionView : UserControl
         string? orderByColumn = null,
         ListSortDirection? orderDirection = null)
     {
+        var cancellation = BeginTableLoad();
+        var loadVersion = _tableLoadVersion;
+        var limit = ParseLimit();
+        using var running = BeginRunningOperation();
+
         try
         {
             SetStatus($"Loading {schemaName}.{tableName}...");
             _orderByColumn = orderByColumn;
             _orderDirection = orderDirection;
-            _currentTable = await _session.LoadTableAsync(schemaName, tableName, ParseLimit(), orderByColumn, orderDirection);
-            TableDataGrid.ItemsSource = _currentTable.Rows.DefaultView;
-            AddCurrentTableColumnsToCompletion();
+            _currentTable = null;
+            TableDataGrid.ItemsSource = null;
+            SetTableEmptyState(false);
             ContentTab.Header = tableName;
             WorkspaceTabs.SelectedItem = ContentTab;
-            PrepopulateQueryEditorIfPristine(_currentTable.SelectSql + ";");
-            await LoadIndexesAsync(schemaName, tableName);
-            await LoadColumnOverviewAsync(schemaName, tableName);
+            await Dispatcher.Yield(DispatcherPriority.Background);
+
+            var firstChunk = true;
+            await foreach (var chunk in _session.StreamTableAsync(
+                               schemaName,
+                               tableName,
+                               limit,
+                               orderByColumn,
+                               orderDirection,
+                               cancellation.Token))
+            {
+                if (!IsCurrentTableLoad(loadVersion, cancellation))
+                {
+                    return;
+                }
+
+                if (firstChunk)
+                {
+                    _currentTable = CreateCurrentTable(chunk);
+                    TableDataGrid.ItemsSource = _currentTable.Rows.DefaultView;
+                    AddCurrentTableColumnsToCompletion();
+                    PrepopulateQueryEditorIfPristine(_currentTable.SelectSql + ";");
+                    firstChunk = false;
+                }
+
+                if (_currentTable is null)
+                {
+                    return;
+                }
+
+                await AppendChunkRowsAsync(_currentTable.Rows, chunk.Rows, loadVersion, cancellation);
+                if (!IsCurrentTableLoad(loadVersion, cancellation))
+                {
+                    return;
+                }
+
+                SetStatus($"Loaded {_currentTable.Rows.Rows.Count} of up to {limit} row(s)...");
+                await Dispatcher.Yield(DispatcherPriority.Background);
+            }
+
+            if (!IsCurrentTableLoad(loadVersion, cancellation) || _currentTable is null)
+            {
+                return;
+            }
+
+            var indexes = await _session.LoadIndexesAsync(schemaName, tableName, cancellation.Token);
+            if (!IsCurrentTableLoad(loadVersion, cancellation))
+            {
+                return;
+            }
+
+            IndexesGrid.ItemsSource = indexes;
+            var columns = await _session.LoadColumnDetailsAsync(schemaName, tableName, cancellation.Token);
+            if (!IsCurrentTableLoad(loadVersion, cancellation))
+            {
+                return;
+            }
+
+            OverviewColumnsGrid.ItemsSource = columns;
 
             var editState = _currentTable.PrimaryKeyColumns.Count == 0
                 ? "no primary key; editing disabled"
                 : $"primary key: {string.Join(", ", _currentTable.PrimaryKeyColumns)}";
+            SetTableEmptyState(_currentTable.Rows.Rows.Count == 0);
+            SetTopBarReturnedRows(_currentTable.Rows.Rows.Count);
             SetStatus($"Loaded {_currentTable.Rows.Rows.Count} row(s), {editState}.");
+        }
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+        {
+            if (IsCurrentTableLoad(loadVersion, cancellation))
+            {
+                SetTableEmptyState(false);
+                SetStatus("Table load stopped.");
+            }
         }
         catch (Exception ex)
         {
-            SetStatus(ex.Message);
+            if (IsCurrentTableLoad(loadVersion, cancellation))
+            {
+                SetTableEmptyState(false);
+                SetStatus(ex.Message);
+            }
+        }
+        finally
+        {
+            CompleteTableLoad(cancellation);
         }
     }
 
@@ -385,6 +612,7 @@ public partial class SessionView : UserControl
 
         try
         {
+            using var running = BeginRunningOperation();
             var affected = await _session.ApplyCellUpdateAsync(edit);
             row.AcceptChanges();
             SetStatus($"Edit applied. {affected} row(s) affected.");
@@ -398,11 +626,13 @@ public partial class SessionView : UserControl
 
     private async Task ApplyPendingEditsAsync()
     {
-        if (_pendingEdits.Count == 0)
+        if (!CanReviewPendingEdits())
         {
             SetStatus("No pending edits.");
             return;
         }
+
+        using var running = BeginRunningOperation();
 
         try
         {
@@ -439,9 +669,148 @@ public partial class SessionView : UserControl
         return int.TryParse(LimitTextBox.Text, out var limit) && limit > 0 ? limit : 500;
     }
 
+    private CancellationTokenSource BeginTableLoad()
+    {
+        _tableLoadCancellation?.Cancel();
+        var cancellation = new CancellationTokenSource();
+        _tableLoadCancellation = cancellation;
+        _tableLoadVersion++;
+        return cancellation;
+    }
+
+    private bool IsCurrentTableLoad(int loadVersion, CancellationTokenSource cancellation)
+    {
+        return loadVersion == _tableLoadVersion &&
+               ReferenceEquals(_tableLoadCancellation, cancellation) &&
+               !cancellation.IsCancellationRequested;
+    }
+
+    private void CompleteTableLoad(CancellationTokenSource cancellation)
+    {
+        if (ReferenceEquals(_tableLoadCancellation, cancellation))
+        {
+            _tableLoadCancellation = null;
+        }
+
+        cancellation.Dispose();
+    }
+
+    private bool IsCurrentQueryRun(int queryVersion, CancellationTokenSource cancellation)
+    {
+        return queryVersion == _queryRunVersion &&
+               ReferenceEquals(_queryCancellation, cancellation) &&
+               !cancellation.IsCancellationRequested;
+    }
+
+    private static TableDataResult CreateCurrentTable(TableDataChunkResult chunk)
+    {
+        var rows = chunk.Rows.Clone();
+        rows.TableName = chunk.TableName;
+        return new TableDataResult(
+            chunk.SchemaName,
+            chunk.TableName,
+            rows,
+            chunk.PrimaryKeyColumns,
+            chunk.SelectSql,
+            chunk.OrderByColumn,
+            chunk.OrderDirection);
+    }
+
+    private async Task AppendChunkRowsAsync(
+        DataTable target,
+        DataTable chunk,
+        int loadVersion,
+        CancellationTokenSource cancellation)
+    {
+        var batchCount = 0;
+        foreach (DataRow row in chunk.Rows)
+        {
+            if (!IsCurrentTableLoad(loadVersion, cancellation))
+            {
+                return;
+            }
+
+            var appended = target.NewRow();
+            appended.ItemArray = row.ItemArray;
+            target.Rows.Add(appended);
+            appended.AcceptChanges();
+            batchCount++;
+
+            if (batchCount < GridAppendBatchSize)
+            {
+                continue;
+            }
+
+            batchCount = 0;
+            await Dispatcher.Yield(DispatcherPriority.Background);
+        }
+    }
+
     private void SetStatus(string message)
     {
         SessionStatusText.Text = message;
+    }
+
+    private void SetQueryRunning(bool isRunning)
+    {
+        RunQueryButton.IsEnabled = !isRunning;
+        StopQueryButton.IsEnabled = isRunning;
+    }
+
+    private IDisposable BeginRunningOperation()
+    {
+        ClearTopBarResultSummary();
+        _runningOperationCount++;
+        UpdateTopBarOperationState();
+        return new RunningOperation(this);
+    }
+
+    private void EndRunningOperation()
+    {
+        _runningOperationCount = Math.Max(0, _runningOperationCount - 1);
+        UpdateTopBarOperationState();
+    }
+
+    private void UpdateTopBarOperationState()
+    {
+        var isRunning = _runningOperationCount > 0;
+        GlobalRunningIndicator.Visibility = isRunning
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+        GlobalResultSummaryText.Visibility = !isRunning && !string.IsNullOrWhiteSpace(GlobalResultSummaryText.Text)
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+    }
+
+    private void SetTopBarReturnedRows(int rowCount)
+    {
+        GlobalResultSummaryText.Text = rowCount == 1
+            ? "1 row returned"
+            : $"{rowCount:N0} rows returned";
+        UpdateTopBarOperationState();
+    }
+
+    private void ClearTopBarResultSummary()
+    {
+        GlobalResultSummaryText.Text = "";
+        UpdateTopBarOperationState();
+    }
+
+    private bool CanReviewPendingEdits()
+    {
+        return DeferEditsToggle.IsChecked == true && _pendingEdits.Count > 0;
+    }
+
+    private void UpdatePendingEditButtons()
+    {
+        var canReviewPendingEdits = CanReviewPendingEdits();
+        ApplyEditsButton.IsEnabled = canReviewPendingEdits;
+        RevertEditsButton.IsEnabled = canReviewPendingEdits;
+    }
+
+    private void SetTableEmptyState(bool isVisible)
+    {
+        ContentEmptyState.Visibility = isVisible ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void ConfigureQueryEditor()
@@ -687,6 +1056,34 @@ public partial class SessionView : UserControl
     private sealed record TreeNodeInfo(TreeNodeKind Kind, string SchemaName, string TableName);
 
     private sealed record PendingEditCandidate(DataRow Row, string ColumnName);
+
+    private sealed record RefreshTableSelection(
+        string SchemaName,
+        string TableName,
+        string? OrderByColumn,
+        ListSortDirection? OrderDirection);
+
+    private sealed class RunningOperation : IDisposable
+    {
+        private readonly SessionView _owner;
+        private bool _disposed;
+
+        public RunningOperation(SessionView owner)
+        {
+            _owner = owner;
+        }
+
+        public void Dispose()
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            _disposed = true;
+            _owner.EndRunningOperation();
+        }
+    }
 
     private enum TreeNodeKind
     {

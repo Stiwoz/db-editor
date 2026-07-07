@@ -64,6 +64,17 @@ public sealed class DatabaseSession : IAsyncDisposable
         return Tables.LoadTableAsync(schemaName, tableName, limit, orderByColumn, orderDirection, cancellationToken);
     }
 
+    public IAsyncEnumerable<TableDataChunkResult> StreamTableAsync(
+        string schemaName,
+        string tableName,
+        int limit,
+        string? orderByColumn = null,
+        ListSortDirection? orderDirection = null,
+        CancellationToken cancellationToken = default)
+    {
+        return Tables.StreamTableAsync(schemaName, tableName, limit, orderByColumn, orderDirection, cancellationToken);
+    }
+
     public Task<IReadOnlyList<string>> LoadColumnsAsync(
         string schemaName,
         string tableName,

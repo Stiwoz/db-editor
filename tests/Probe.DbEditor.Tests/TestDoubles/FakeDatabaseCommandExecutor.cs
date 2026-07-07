@@ -40,6 +40,7 @@ internal sealed class FakeDatabaseCommandExecutor : IDatabaseCommandExecutor
         Action<MySqlCommand> configure,
         CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         using var command = Capture("Scalar", sql, configure);
         return Task.FromResult(_scalarResults.Count == 0 ? null : _scalarResults.Dequeue());
     }
@@ -49,6 +50,7 @@ internal sealed class FakeDatabaseCommandExecutor : IDatabaseCommandExecutor
         Action<MySqlCommand> configure,
         CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         using var command = Capture("Table", sql, configure);
         return Task.FromResult(_tables.Count == 0 ? new DataTable() : _tables.Dequeue());
     }
@@ -58,6 +60,7 @@ internal sealed class FakeDatabaseCommandExecutor : IDatabaseCommandExecutor
         Action<MySqlCommand> configure,
         CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         using var command = Capture("Reader", sql, configure);
         return Task.FromResult(_readerResults.Count == 0
             ? new SqlExecutionResult(new DataTable(), 0)
@@ -69,6 +72,7 @@ internal sealed class FakeDatabaseCommandExecutor : IDatabaseCommandExecutor
         Action<MySqlCommand> configure,
         CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         using var command = Capture("NonQuery", sql, configure);
         return Task.FromResult(_nonQueryResults.Count == 0 ? 1 : _nonQueryResults.Dequeue());
     }

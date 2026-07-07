@@ -171,7 +171,6 @@ public partial class MainWindow : Window
                 var view = new SessionView(session);
                 var tab = new TabItem { Content = view };
                 tab.Header = CreateConnectionTabHeader(profile.Name, tab);
-                tab.PreviewMouseDown += ConnectionTab_PreviewMouseDown;
 
                 ConnectionsTab.Items.Add(tab);
                 ConnectionsTab.SelectedItem = tab;
@@ -242,7 +241,13 @@ public partial class MainWindow : Window
 
     private DockPanel CreateConnectionTabHeader(string title, TabItem tab)
     {
-        var panel = new DockPanel { LastChildFill = false, };
+        var panel = new DockPanel
+        {
+            LastChildFill = false,
+            Background = Brushes.Transparent,
+            Tag = tab
+        };
+        panel.PreviewMouseDown += ConnectionTabHeader_PreviewMouseDown;
 
         var closeButton = new Button
         {
@@ -273,9 +278,10 @@ public partial class MainWindow : Window
         return panel;
     }
 
-    private void ConnectionTab_PreviewMouseDown(object sender, MouseButtonEventArgs e)
+    private void ConnectionTabHeader_PreviewMouseDown(object sender, MouseButtonEventArgs e)
     {
-        if (e.ChangedButton != MouseButton.Middle || sender is not TabItem tab)
+        if (e.ChangedButton != MouseButton.Middle ||
+            sender is not FrameworkElement { Tag: TabItem tab })
         {
             return;
         }

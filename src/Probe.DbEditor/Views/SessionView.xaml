@@ -18,13 +18,13 @@
         <Border Grid.Row="0" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1"
             Background="{StaticResource SurfaceBrush}"
             Padding="8">
-            <DockPanel>
-                <TextBlock x:Name="SessionTitleText"
-                    DockPanel.Dock="Left"
-                    VerticalAlignment="Center"
-                    FontWeight="SemiBold"
-                    Margin="0,0,0,0" />
-                <StackPanel Orientation="Horizontal" DockPanel.Dock="Right">
+            <DockPanel LastChildFill="False">
+                <StackPanel Orientation="Horizontal" DockPanel.Dock="Left">
+                    <TextBlock x:Name="SessionTitleText"
+                        DockPanel.Dock="Left"
+                        VerticalAlignment="Center"
+                        FontWeight="SemiBold"
+                        Margin="0,0,0,0" />
                     <Separator Style="{StaticResource SeparatorStyle}"
                         Margin="12,0,12,0" Width="1" />
                     <TextBlock VerticalAlignment="Center" Margin="0,0,6,0" Text="Limit:" />
@@ -39,10 +39,57 @@
                     <Separator Style="{StaticResource SeparatorStyle}"
                         Margin="12,0,12,0" Width="1" />
                     <Button Content="Refresh" Padding="10,4" Margin="0,0,8,0" Click="Refresh_Click" />
-                    <Button Content="Apply Edits" Padding="10,4" Margin="0,0,8,0"
+                    <Button x:Name="ApplyEditsButton" Content="Apply Edits" Padding="10,4" Margin="0,0,8,0"
                         Click="ApplyPending_Click" />
-                    <Button Content="Revert Edits" Padding="10,4" Click="RevertPending_Click" />
+                    <Button x:Name="RevertEditsButton" Content="Revert Edits" Padding="10,4"
+                        Click="RevertPending_Click" />
                 </StackPanel>
+                <StackPanel x:Name="GlobalRunningIndicator"
+                    DockPanel.Dock="Right"
+                    Orientation="Horizontal"
+                    VerticalAlignment="Center"
+                    Margin="14,0,0,0"
+                    Visibility="Collapsed">
+                    <Grid Width="16" Height="16" Margin="0,0,6,0">
+                        <Ellipse Width="14"
+                            Height="14"
+                            Stroke="{StaticResource BorderBrush}"
+                            StrokeThickness="2"
+                            Opacity="0.35" />
+                        <Path Width="14"
+                            Height="14"
+                            Stroke="{StaticResource AccentBrush}"
+                            StrokeThickness="2"
+                            StrokeStartLineCap="Round"
+                            StrokeEndLineCap="Round"
+                            Data="M 7,0 A 7,7 0 0 1 14,7"
+                            RenderTransformOrigin="0.5,0.5">
+                            <Path.RenderTransform>
+                                <RotateTransform />
+                            </Path.RenderTransform>
+                            <Path.Triggers>
+                                <EventTrigger RoutedEvent="Loaded">
+                                    <BeginStoryboard>
+                                        <Storyboard RepeatBehavior="Forever">
+                                            <DoubleAnimation
+                                                Storyboard.TargetProperty="(UIElement.RenderTransform).(RotateTransform.Angle)"
+                                                From="0"
+                                                To="360"
+                                                Duration="0:0:0.9" />
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </EventTrigger>
+                            </Path.Triggers>
+                        </Path>
+                    </Grid>
+                    <TextBlock VerticalAlignment="Center" Text="Running..." />
+                </StackPanel>
+                <TextBlock x:Name="GlobalResultSummaryText"
+                    DockPanel.Dock="Right"
+                    VerticalAlignment="Center"
+                    Margin="14,0,0,0"
+                    Foreground="{StaticResource MutedTextBrush}"
+                    Visibility="Collapsed" />
             </DockPanel>
         </Border>
 
@@ -63,19 +110,40 @@
 
             <TabControl x:Name="WorkspaceTabs" Grid.Column="1">
                 <TabItem x:Name="ContentTab" Header="Content">
-                    <DataGrid x:Name="TableDataGrid"
-                        AutoGenerateColumns="True"
-                        CanUserAddRows="False"
-                        CanUserDeleteRows="False"
-                        EnableRowVirtualization="True"
-                        EnableColumnVirtualization="True"
-                        SelectionUnit="CellOrRowHeader"
-                        GridLinesVisibility="All"
-                        AutoGeneratingColumn="TableDataGrid_AutoGeneratingColumn"
-                        Sorting="TableDataGrid_Sorting"
-                        PreparingCellForEdit="TableDataGrid_PreparingCellForEdit"
-                        CellEditEnding="TableDataGrid_CellEditEnding"
-                        CurrentCellChanged="TableDataGrid_CurrentCellChanged" />
+                    <Grid>
+                        <DataGrid x:Name="TableDataGrid"
+                            AutoGenerateColumns="True"
+                            CanUserAddRows="False"
+                            CanUserDeleteRows="False"
+                            EnableRowVirtualization="True"
+                            EnableColumnVirtualization="True"
+                            SelectionUnit="CellOrRowHeader"
+                            GridLinesVisibility="All"
+                            AutoGeneratingColumn="TableDataGrid_AutoGeneratingColumn"
+                            Sorting="TableDataGrid_Sorting"
+                            PreparingCellForEdit="TableDataGrid_PreparingCellForEdit"
+                            CellEditEnding="TableDataGrid_CellEditEnding"
+                            CurrentCellChanged="TableDataGrid_CurrentCellChanged" />
+                        <Border x:Name="ContentEmptyState"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Background="{StaticResource SurfaceBrush}"
+                            BorderBrush="{StaticResource BorderBrush}"
+                            BorderThickness="1"
+                            Padding="18,14"
+                            IsHitTestVisible="False"
+                            Visibility="Collapsed">
+                            <StackPanel>
+                                <TextBlock Text="This table is empty."
+                                    FontWeight="SemiBold"
+                                    HorizontalAlignment="Center" />
+                                <TextBlock Text="No rows were returned for the selected table."
+                                    Foreground="{StaticResource MutedTextBrush}"
+                                    Margin="0,4,0,0"
+                                    HorizontalAlignment="Center" />
+                            </StackPanel>
+                        </Border>
+                    </Grid>
                 </TabItem>
 
                 <TabItem Header="Indexes">
@@ -178,7 +246,10 @@
                             HorizontalScrollBarVisibility="Auto"
                             VerticalScrollBarVisibility="Auto" />
                         <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,8,0,8">
-                            <Button Content="Run" Padding="12,4" Click="RunQuery_Click" />
+                            <Button x:Name="RunQueryButton" Content="Run" Padding="12,4"
+                                Click="RunQuery_Click" />
+                            <Button x:Name="StopQueryButton" Content="Stop" Padding="12,4"
+                                Margin="8,0,0,0" IsEnabled="False" Click="StopQuery_Click" />
                             <TextBlock x:Name="QueryStatusText" VerticalAlignment="Center"
                                 Margin="12,0,0,0" Foreground="{StaticResource MutedTextBrush}" />
                         </StackPanel>

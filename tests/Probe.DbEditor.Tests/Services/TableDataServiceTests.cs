@@ -32,8 +32,62 @@ public sealed class TableDataServiceTests
         Assert.AreEqual(DataRowState.Unchanged, result.Rows.Rows[0].RowState);
 
         var selectCall = executor.Calls.Last();
-        Assert.AreEqual("SELECT * FROM `app`.`users` ORDER BY `name` DESC LIMIT @limit", selectCall.Sql);
+        Assert.AreEqual("SELECT * FROM `app`.`users` ORDER BY `name` DESC LIMIT @limit OFFSET @offset", selectCall.Sql);
         Assert.AreEqual(1, selectCall.Parameters["@limit"]);
+        Assert.AreEqual(0, selectCall.Parameters["@offset"]);
+    }
+
+    [TestMethod]
+    public async Task LoadTableAsync_ChunksSelectsUntilLimit()
+    {
+        var executor = new FakeDatabaseCommandExecutor();
+        executor.EnqueueTable(DataTableFactory.SingleColumn("COLUMN_NAME", "id"));
+        executor.EnqueueTable(UserRows(100, 1));
+        executor.EnqueueTable(UserRows(100, 101));
+        executor.EnqueueTable(UserRows(50, 201));
+        var metadata = new DatabaseMetadataService(executor);
+        var service = new TableDataService(executor, metadata);
+
+        var result = await service.LoadTableAsync("app", "users", 250);
+
+        Assert.AreEqual(250, result.Rows.Rows.Count);
+        var selectCalls = executor.Calls
+            .Where(call => call.Sql.StartsWith("SELECT * FROM", StringComparison.Ordinal))
+            .ToList();
+        Assert.AreEqual(3, selectCalls.Count);
+        Assert.AreEqual(100, selectCalls[0].Parameters["@limit"]);
+        Assert.AreEqual(0, selectCalls[0].Parameters["@offset"]);
+        Assert.AreEqual(100, selectCalls[1].Parameters["@limit"]);
+        Assert.AreEqual(100, selectCalls[1].Parameters["@offset"]);
+        Assert.AreEqual(50, selectCalls[2].Parameters["@limit"]);
+        Assert.AreEqual(200, selectCalls[2].Parameters["@offset"]);
+    }
+
+    [TestMethod]
+    public async Task StreamTableAsync_StopsBeforeNextChunkWhenCanceled()
+    {
+        var executor = new FakeDatabaseCommandExecutor();
+        executor.EnqueueTable(DataTableFactory.SingleColumn("COLUMN_NAME", "id"));
+        executor.EnqueueTable(UserRows(100, 1));
+        var metadata = new DatabaseMetadataService(executor);
+        var service = new TableDataService(executor, metadata);
+        using var cancellation = new CancellationTokenSource();
+        await using var stream = service.StreamTableAsync(
+            "app",
+            "users",
+            250,
+            cancellationToken: cancellation.Token).GetAsyncEnumerator();
+
+        Assert.IsTrue(await stream.MoveNextAsync());
+        Assert.AreEqual(100, stream.Current.Rows.Rows.Count);
+
+        cancellation.Cancel();
+        await TestAssert.ThrowsAsync<OperationCanceledException>(async () => await stream.MoveNextAsync().AsTask());
+
+        var selectCalls = executor.Calls
+            .Where(call => call.Sql.StartsWith("SELECT * FROM", StringComparison.Ordinal))
+            .ToList();
+        Assert.AreEqual(1, selectCalls.Count);
     }
 
     [TestMethod]
@@ -133,12 +187,17 @@ public sealed class TableDataServiceTests
         Assert.IsFalse(executor.Calls.Any(call => call.Operation == "NonQuery"));
     }
 
-    private static DataTable UserRows()
+    private static DataTable UserRows(int count = 1, int startId = 7)
     {
         var table = new DataTable();
         table.Columns.Add("id", typeof(int));
         table.Columns.Add("name", typeof(string));
-        table.Rows.Add(7, "Alice");
+        for (var index = 0; index < count; index++)
+        {
+            var id = startId + index;
+            table.Rows.Add(id, index == 0 ? "Alice" : $"User {id}");
+        }
+
         return table;
     }
 
