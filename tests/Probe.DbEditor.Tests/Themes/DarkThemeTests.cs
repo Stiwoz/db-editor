@@ -7,12 +7,16 @@ public sealed class DarkThemeTests
     public async Task DarkTheme_ContainsReadableEditingAndPixelScrollingRegressions()
     {
         var themePath = Path.Combine(AppContext.BaseDirectory, "Fixtures", "DarkTheme.xaml");
+        var sessionViewPath = Path.Combine(AppContext.BaseDirectory, "Fixtures", "SessionView.xaml");
         var xaml = await File.ReadAllTextAsync(themePath);
+        var sessionViewXaml = await File.ReadAllTextAsync(sessionViewPath);
         var textBoxStyle = ExtractStyle(xaml, "<Style x:Key=\"BaseTextBoxStyle\" TargetType=\"{x:Type TextBox}\">");
         var passwordBoxStyle = ExtractStyle(xaml, "<Style x:Key=\"BasePasswordBoxStyle\" TargetType=\"{x:Type PasswordBox}\">");
         var comboBoxStyle = ExtractStyle(xaml, "<Style x:Key=\"BaseComboBoxStyle\" TargetType=\"{x:Type ComboBox}\">");
         var comboBoxItemStyle = ExtractStyle(xaml, "<Style TargetType=\"{x:Type ComboBoxItem}\">");
         var listBoxItemStyle = ExtractStyle(xaml, "<Style TargetType=\"{x:Type ListBoxItem}\">");
+        var groupBoxStyle = ExtractStyle(xaml, "<Style TargetType=\"{x:Type GroupBox}\">");
+        var pendingEditsGroupBoxStyle = ExtractStyle(xaml, "<Style x:Key=\"PendingEditsGroupBoxStyle\"");
 
         StringAssert.Contains(xaml, "EditingCellBackgroundBrush");
         StringAssert.Contains(xaml, "Color=\"#E2DFD0\"");
@@ -28,6 +32,10 @@ public sealed class DarkThemeTests
         StringAssert.Contains(listBoxItemStyle, "ControlTemplate TargetType=\"{x:Type ListBoxItem}\"");
         StringAssert.Contains(listBoxItemStyle, "TargetName=\"ItemBorder\" Property=\"Background\"");
         StringAssert.Contains(listBoxItemStyle, "Value=\"{StaticResource AccentBrush}\"");
+        StringAssert.Contains(groupBoxStyle, "BorderThickness=\"1,1,1,0\"");
+        StringAssert.Contains(groupBoxStyle, "BorderThickness=\"1\"");
+        StringAssert.Contains(pendingEditsGroupBoxStyle, "BorderThickness=\"0\"");
+        StringAssert.Contains(sessionViewXaml, "Style=\"{StaticResource PendingEditsGroupBoxStyle}\"");
         StringAssert.Contains(xaml, "Property=\"VirtualizingPanel.ScrollUnit\" Value=\"Pixel\"");
         StringAssert.Contains(xaml, "Property=\"ScrollViewer.CanContentScroll\" Value=\"True\"");
     }

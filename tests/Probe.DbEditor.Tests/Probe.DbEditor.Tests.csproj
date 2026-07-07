@@ -31,6 +31,9 @@
     <None Include="..\..\src\Probe.DbEditor\Views\SessionView.xaml.cs"
         Link="Fixtures\SessionView.xaml.cs"
         CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\src\Probe.DbEditor\Views\SessionView.xaml"
+        Link="Fixtures\SessionView.xaml"
+        CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

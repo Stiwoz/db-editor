@@ -627,6 +627,42 @@
                         </Grid.RowDefinitions>
                         <Border Background="{StaticResource SurfaceBrush}"
                             BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="1,1,1,0"
+                            CornerRadius="0"
+                            Padding="8,4">
+                            <ContentPresenter ContentSource="Header"
+                                RecognizesAccessKey="False" />
+                        </Border>
+                        <Border Grid.Row="1"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="1"
+                            CornerRadius="0"
+                            Padding="{TemplateBinding Padding}">
+                            <ContentPresenter />
+                        </Border>
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="PendingEditsGroupBoxStyle"
+        TargetType="{x:Type GroupBox}">
+        <Setter Property="Background" Value="{StaticResource SurfaceBrush}" />
+        <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
+        <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type GroupBox}">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <Border Background="{StaticResource SurfaceBrush}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
                             BorderThickness="0"
                             CornerRadius="0"
                             Padding="8,4">

@@ -288,7 +288,8 @@
             </TabControl>
         </Grid>
 
-        <GroupBox Grid.Row="2" Header="Pending Edits" Margin="0" Padding="0" BorderThickness="0">
+        <GroupBox Grid.Row="2" Header="Pending Edits" Margin="0"
+            Style="{StaticResource PendingEditsGroupBoxStyle}">
             <DataGrid x:Name="PendingEditsGrid"
                 AutoGenerateColumns="False"
                 IsReadOnly="True"
