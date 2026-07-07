@@ -2,6 +2,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:avalonEdit="http://icsharpcode.net/sharpdevelop/avalonedit"
+    xmlns:completion="clr-namespace:ICSharpCode.AvalonEdit.CodeCompletion;assembly=ICSharpCode.AvalonEdit"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     mc:Ignorable="d"
@@ -39,7 +40,8 @@
                     <Separator Style="{StaticResource SeparatorStyle}"
                         Margin="12,0,12,0" Width="1" />
                     <Button Content="Refresh" Padding="10,4" Margin="0,0,8,0" Click="Refresh_Click" />
-                    <Button x:Name="ApplyEditsButton" Content="Apply Edits" Padding="10,4" Margin="0,0,8,0"
+                    <Button x:Name="ApplyEditsButton" Content="Apply Edits" Padding="10,4"
+                        Margin="0,0,8,0"
                         Click="ApplyPending_Click" />
                     <Button x:Name="RevertEditsButton" Content="Revert Edits" Padding="10,4"
                         Click="RevertPending_Click" />
@@ -104,12 +106,13 @@
                 <DockPanel>
                     <TextBlock DockPanel.Dock="Top" FontWeight="SemiBold" Margin="10" Text="Schemas" />
                     <TreeView x:Name="SchemaTree"
-                        SelectedItemChanged="SchemaTree_SelectedItemChanged" BorderThickness="0,1,0,1" />
+                        SelectedItemChanged="SchemaTree_SelectedItemChanged"
+                        BorderThickness="0,1,0,1" />
                 </DockPanel>
             </Border>
 
             <TabControl x:Name="WorkspaceTabs" Grid.Column="1">
-                <TabItem x:Name="ContentTab" Header="Content">
+                <TabItem x:Name="ContentTab" Header="Content" Visibility="Collapsed">
                     <Grid>
                         <DataGrid x:Name="TableDataGrid"
                             AutoGenerateColumns="True"
@@ -146,7 +149,7 @@
                     </Grid>
                 </TabItem>
 
-                <TabItem Header="Indexes">
+                <TabItem x:Name="IndexesTab" Header="Indexes" Visibility="Collapsed">
                     <DockPanel Margin="0">
                         <Border DockPanel.Dock="Top" BorderBrush="{StaticResource BorderBrush}"
                             BorderThickness="0,0,0,1"
@@ -189,7 +192,7 @@
                     </DockPanel>
                 </TabItem>
 
-                <TabItem Header="Overview">
+                <TabItem x:Name="OverviewTab" Header="Overview" Visibility="Collapsed">
                     <DataGrid x:Name="OverviewColumnsGrid"
                         AutoGenerateColumns="False"
                         IsReadOnly="True"
@@ -230,7 +233,7 @@
                     </DataGrid>
                 </TabItem>
 
-                <TabItem Header="Query">
+                <TabItem x:Name="QueryTab" Header="Query" IsSelected="True">
                     <Grid Margin="10">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="150" />
@@ -245,21 +248,64 @@
                             ShowLineNumbers="True"
                             HorizontalScrollBarVisibility="Auto"
                             VerticalScrollBarVisibility="Auto" />
-                        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,8,0,8">
-                            <Button x:Name="RunQueryButton" Content="Run" Padding="12,4"
-                                Click="RunQuery_Click" />
-                            <Button x:Name="StopQueryButton" Content="Stop" Padding="12,4"
-                                Margin="8,0,0,0" IsEnabled="False" Click="StopQuery_Click" />
-                            <TextBlock x:Name="QueryStatusText" VerticalAlignment="Center"
-                                Margin="12,0,0,0" Foreground="{StaticResource MutedTextBrush}" />
-                        </StackPanel>
+                        <Canvas x:Name="QueryCompletionLayer"
+                            Grid.Row="0"
+                            Panel.ZIndex="10"
+                            ClipToBounds="False"
+                            IsHitTestVisible="False"
+                            Focusable="False">
+                            <Border x:Name="QueryCompletionOverlay"
+                                Width="360"
+                                MaxHeight="280"
+                                Background="{StaticResource SurfaceBrush}"
+                                BorderBrush="{StaticResource AccentBrush}"
+                                BorderThickness="1"
+                                Visibility="Collapsed"
+                                Focusable="False"
+                                KeyboardNavigation.TabNavigation="None">
+                                <Border.Resources>
+                                    <SolidColorBrush
+                                        x:Key="{x:Static SystemColors.HighlightBrushKey}"
+                                        Color="{StaticResource AccentColor}" />
+                                    <SolidColorBrush
+                                        x:Key="{x:Static SystemColors.InactiveSelectionHighlightBrushKey}"
+                                        Color="{StaticResource AccentColor}" />
+                                    <SolidColorBrush
+                                        x:Key="{x:Static SystemColors.HighlightTextBrushKey}"
+                                        Color="{StaticResource LightColor}" />
+                                    <SolidColorBrush
+                                        x:Key="{x:Static SystemColors.InactiveSelectionHighlightTextBrushKey}"
+                                        Color="{StaticResource LightColor}" />
+                                </Border.Resources>
+                                <completion:CompletionList x:Name="QueryCompletionList"
+                                    Focusable="False"
+                                    KeyboardNavigation.TabNavigation="None" />
+                            </Border>
+                        </Canvas>
+                        <Border Grid.Row="1" BorderBrush="{StaticResource BorderBrush}"
+                            BorderThickness="0,1" Padding="0,8"
+                            Margin="0,8">
+                            <StackPanel Orientation="Horizontal">
+                                <Button x:Name="RunQueryButton" Content="Run selected"
+                                    Padding="12,4"
+                                    Click="RunQuery_Click" />
+                                <Button x:Name="RunAllQueriesButton" Content="Run all"
+                                    Padding="12,4"
+                                    Margin="4,0,0,0" Click="RunAllQueries_Click" />
+                                <Button x:Name="StopQueryButton" Content="Stop" Padding="12,4"
+                                    Margin="8,0,0,0" IsEnabled="False" Click="StopQuery_Click" />
+                                <TextBlock x:Name="QueryStatusText" VerticalAlignment="Center"
+                                    Margin="12,0,0,0" Foreground="{StaticResource MutedTextBrush}" />
+                            </StackPanel>
+                        </Border>
                         <DataGrid x:Name="QueryResultGrid"
                             Grid.Row="2"
-                            AutoGenerateColumns="True"
-                            AutoGeneratingColumn="ReadOnlyDataGrid_AutoGeneratingColumn"
+                            AutoGenerateColumns="False"
                             IsReadOnly="True"
                             EnableRowVirtualization="True"
-                            EnableColumnVirtualization="True" />
+                            EnableColumnVirtualization="True"
+                            Margin="-10,0,-10,-10"
+                            Visibility="Collapsed" />
                     </Grid>
                 </TabItem>
 

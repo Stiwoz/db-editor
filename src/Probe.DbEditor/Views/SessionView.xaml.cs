@@ -8,7 +8,7 @@ using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
-using ICSharpCode.AvalonEdit.CodeCompletion;
+using ICSharpCode.AvalonEdit.Document;
 using Probe.DbEditor.Models;
 using Probe.DbEditor.Services;
 using Probe.DbEditor.Views.SqlEditor;
@@ -27,7 +27,8 @@ public partial class SessionView : UserControl
     private readonly ObservableCollection<PendingCellEdit> _pendingEdits = [];
     private static readonly Style EditingTextBoxStyle = CreateEditingTextBoxStyle();
     private TableDataResult? _currentTable;
-    private CompletionWindow? _completionWindow;
+    private int _completionStartOffset;
+    private int _completionEndOffset;
     private string? _orderByColumn;
     private ListSortDirection? _orderDirection;
     private bool _loaded;
@@ -56,10 +57,12 @@ public partial class SessionView : UserControl
         UpdatePendingEditButtons();
         UpdateTopBarOperationState();
         SetTableEmptyState(false);
+        SetTableTabsVisible(false);
     }
 
     public async ValueTask CloseAsync()
     {
+        HideCompletionOverlay();
         _tableLoadCancellation?.Cancel();
         _queryRunVersion++;
         _queryCancellation?.Cancel();
@@ -92,7 +95,10 @@ public partial class SessionView : UserControl
         if (SchemaTree.SelectedItem is TreeViewItem { Tag: TreeNodeInfo { Kind: TreeNodeKind.Table } node })
         {
             await LoadTableAsync(node.SchemaName, node.TableName);
+            return;
         }
+
+        ClearSelectedTableWorkspace();
     }
 
     private void TableDataGrid_AutoGeneratingColumn(object sender, DataGridAutoGeneratingColumnEventArgs e)
@@ -286,8 +292,37 @@ public partial class SessionView : UserControl
 
     private async void RunQuery_Click(object sender, RoutedEventArgs e)
     {
+        await RunQueryStatementsAsync(GetSelectedOrCurrentQueryStatements());
+    }
+
+    private async void RunAllQueries_Click(object sender, RoutedEventArgs e)
+    {
+        await RunQueryStatementsAsync(SqlStatementParser.Parse(QueryEditor.Text));
+    }
+
+    private IReadOnlyList<SqlStatement> GetSelectedOrCurrentQueryStatements()
+    {
+        if (!string.IsNullOrWhiteSpace(QueryEditor.SelectedText))
+        {
+            return SqlStatementParser.Parse(QueryEditor.SelectedText, QueryEditor.SelectionStart);
+        }
+
+        var currentStatement = SqlStatementParser.FindStatementAtOffset(QueryEditor.Text, QueryEditor.CaretOffset);
+        return currentStatement is null ? [] : [currentStatement];
+    }
+
+    private async Task RunQueryStatementsAsync(IReadOnlyList<SqlStatement> statements)
+    {
+        HideCompletionOverlay();
         if (_queryCancellation is not null)
         {
+            return;
+        }
+
+        if (statements.Count == 0)
+        {
+            HideQueryResults();
+            QueryStatusText.Text = "Enter a SQL statement to run.";
             return;
         }
 
@@ -295,13 +330,17 @@ public partial class SessionView : UserControl
         _queryCancellation = cancellation;
         var queryVersion = ++_queryRunVersion;
         SetQueryRunning(true);
+        HideQueryResults();
         using var running = BeginRunningOperation();
 
         try
         {
-            QueryStatusText.Text = "Running...";
+            QueryStatusText.Text = statements.Count == 1
+                ? "Running..."
+                : $"Running 1 of {statements.Count}...";
             await Dispatcher.Yield(DispatcherPriority.Background);
-            var result = await _session.RunSqlAsync(QueryEditor.Text, cancellation.Token);
+
+            var summary = await ExecuteQueryStatementsAsync(statements, queryVersion, cancellation);
             if (!IsCurrentQueryRun(queryVersion, cancellation))
             {
                 if (cancellation.IsCancellationRequested)
@@ -312,10 +351,7 @@ public partial class SessionView : UserControl
                 return;
             }
 
-            QueryResultGrid.ItemsSource = result.Rows.DefaultView;
-            QueryStatusText.Text = result.Rows.Rows.Count > 0
-                ? $"{result.Rows.Rows.Count} row(s)"
-                : $"{result.RowsAffected} affected row(s)";
+            ShowQueryExecutionResult(summary);
         }
         catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
         {
@@ -344,6 +380,72 @@ public partial class SessionView : UserControl
         }
     }
 
+    private async Task<QueryExecutionSummary> ExecuteQueryStatementsAsync(
+        IReadOnlyList<SqlStatement> statements,
+        int queryVersion,
+        CancellationTokenSource cancellation)
+    {
+        var summary = new QueryExecutionSummary();
+        for (var index = 0; index < statements.Count; index++)
+        {
+            if (!IsCurrentQueryRun(queryVersion, cancellation))
+            {
+                break;
+            }
+
+            if (statements.Count > 1)
+            {
+                QueryStatusText.Text = $"Running {index + 1} of {statements.Count}...";
+                await Dispatcher.Yield(DispatcherPriority.Background);
+            }
+
+            var statement = statements[index];
+            var result = await _session.RunSqlAsync(statement.Text, cancellation.Token);
+            summary.Add(statement, result);
+        }
+
+        return summary;
+    }
+
+    private void ShowQueryExecutionResult(QueryExecutionSummary summary)
+    {
+        if (summary.LastRows is not null)
+        {
+            ShowQueryResults(summary.LastRows);
+            QueryStatusText.Text = $"{summary.LastRows.Rows.Count} row(s)";
+            return;
+        }
+
+        HideQueryResults();
+        QueryStatusText.Text = FormatAffectedRows(summary);
+    }
+
+    private static string FormatAffectedRows(QueryExecutionSummary summary)
+    {
+        var parts = new List<string>();
+        if (summary.InsertStatementCount > 0)
+        {
+            parts.Add($"{summary.InsertedRows:N0} rows added");
+        }
+
+        if (summary.UpdateStatementCount > 0)
+        {
+            parts.Add($"{summary.ModifiedRows:N0} rows modified");
+        }
+
+        if (summary.DeleteStatementCount > 0)
+        {
+            parts.Add($"{summary.DeletedRows:N0} rows deleted");
+        }
+
+        if (summary.OtherStatementCount > 0)
+        {
+            parts.Add($"{summary.OtherAffectedRows:N0} affected row(s)");
+        }
+
+        return parts.Count > 0 ? string.Join(", ", parts) : "0 affected row(s)";
+    }
+
     private void StopQuery_Click(object sender, RoutedEventArgs e)
     {
         if (_queryCancellation is null)
@@ -360,6 +462,10 @@ public partial class SessionView : UserControl
     {
         using var running = BeginRunningOperation();
         var tableToReload = reloadSelectedTable ? CaptureSelectedTableForRefresh() : null;
+        if (tableToReload is null)
+        {
+            ClearSelectedTableWorkspace();
+        }
 
         try
         {
@@ -408,6 +514,7 @@ public partial class SessionView : UserControl
 
             if (tableItemToReselect is null)
             {
+                ClearSelectedTableWorkspace();
                 SetStatus($"Loaded {schemas.Count} schema(s). Previously selected table no longer exists.");
                 return;
             }
@@ -477,7 +584,10 @@ public partial class SessionView : UserControl
             _orderDirection = orderDirection;
             _currentTable = null;
             TableDataGrid.ItemsSource = null;
+            IndexesGrid.ItemsSource = null;
+            OverviewColumnsGrid.ItemsSource = null;
             SetTableEmptyState(false);
+            SetTableTabsVisible(true);
             ContentTab.Header = tableName;
             WorkspaceTabs.SelectedItem = ContentTab;
             await Dispatcher.Yield(DispatcherPriority.Background);
@@ -760,7 +870,42 @@ public partial class SessionView : UserControl
     private void SetQueryRunning(bool isRunning)
     {
         RunQueryButton.IsEnabled = !isRunning;
+        RunAllQueriesButton.IsEnabled = !isRunning;
         StopQueryButton.IsEnabled = isRunning;
+    }
+
+    private void HideQueryResults()
+    {
+        QueryResultGrid.ItemsSource = null;
+        QueryResultGrid.Columns.Clear();
+        QueryResultGrid.Visibility = Visibility.Collapsed;
+    }
+
+    private void ShowQueryResults(DataTable rows)
+    {
+        QueryResultGrid.ItemsSource = null;
+        QueryResultGrid.Columns.Clear();
+        CreateQueryResultColumns(rows);
+        QueryResultGrid.Visibility = Visibility.Visible;
+        QueryResultGrid.ItemsSource = rows.DefaultView;
+        QueryResultGrid.Items.Refresh();
+    }
+
+    private void CreateQueryResultColumns(DataTable rows)
+    {
+        foreach (DataColumn column in rows.Columns)
+        {
+            QueryResultGrid.Columns.Add(new DataGridTextColumn
+            {
+                Header = column.ColumnName,
+                SortMemberPath = column.ColumnName,
+                Binding = new Binding($"[{column.ColumnName}]")
+                {
+                    Mode = BindingMode.OneWay,
+                    TargetNullValue = "NULL"
+                }
+            });
+        }
     }
 
     private IDisposable BeginRunningOperation()
@@ -819,6 +964,42 @@ public partial class SessionView : UserControl
         ContentEmptyState.Visibility = isVisible ? Visibility.Visible : Visibility.Collapsed;
     }
 
+    private void SetTableTabsVisible(bool isVisible)
+    {
+        var visibility = isVisible ? Visibility.Visible : Visibility.Collapsed;
+        ContentTab.Visibility = visibility;
+        IndexesTab.Visibility = visibility;
+        OverviewTab.Visibility = visibility;
+
+        if (!isVisible && IsTableWorkspaceTabSelected())
+        {
+            WorkspaceTabs.SelectedItem = QueryTab;
+        }
+    }
+
+    private bool IsTableWorkspaceTabSelected()
+    {
+        return ReferenceEquals(WorkspaceTabs.SelectedItem, ContentTab) ||
+               ReferenceEquals(WorkspaceTabs.SelectedItem, IndexesTab) ||
+               ReferenceEquals(WorkspaceTabs.SelectedItem, OverviewTab);
+    }
+
+    private void ClearSelectedTableWorkspace()
+    {
+        _tableLoadCancellation?.Cancel();
+        _tableLoadVersion++;
+        _currentTable = null;
+        _orderByColumn = null;
+        _orderDirection = null;
+        TableDataGrid.ItemsSource = null;
+        IndexesGrid.ItemsSource = null;
+        OverviewColumnsGrid.ItemsSource = null;
+        ContentTab.Header = "Content";
+        SetTableEmptyState(false);
+        SetTableTabsVisible(false);
+        ClearTopBarResultSummary();
+    }
+
     private void ConfigureQueryEditor()
     {
         QueryEditor.SyntaxHighlighting = MySqlSyntaxHighlighting.Load();
@@ -826,8 +1007,11 @@ public partial class SessionView : UserControl
         QueryEditor.Options.IndentationSize = 4;
         QueryEditor.TextArea.TextEntered += QueryEditor_TextEntered;
         QueryEditor.TextArea.TextEntering += QueryEditor_TextEntering;
+        QueryEditor.TextArea.Caret.PositionChanged += QueryEditorCaret_PositionChanged;
         QueryEditor.PreviewKeyDown += QueryEditor_PreviewKeyDown;
+        QueryEditor.LostKeyboardFocus += QueryEditor_LostKeyboardFocus;
         QueryEditor.TextChanged += QueryEditor_TextChanged;
+        QueryCompletionList.InsertionRequested += QueryCompletionList_InsertionRequested;
     }
 
     private void QueryEditor_TextChanged(object? sender, EventArgs e)
@@ -836,6 +1020,18 @@ public partial class SessionView : UserControl
         {
             _queryTextEditedByUser = true;
         }
+
+        UpdateCompletionSelectionOrClose();
+    }
+
+    private void QueryEditorCaret_PositionChanged(object? sender, EventArgs e)
+    {
+        UpdateCompletionSelectionOrClose();
+    }
+
+    private void QueryEditor_LostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        HideCompletionOverlay();
     }
 
     private void QueryEditor_TextEntered(object? sender, TextCompositionEventArgs e)
@@ -848,79 +1044,164 @@ public partial class SessionView : UserControl
         var character = e.Text[0];
         if (character == '.' || character == '@' || character == ':' || char.IsLetterOrDigit(character))
         {
-            ShowCompletionWindow();
+            ShowCompletionOverlay();
         }
     }
 
     private void QueryEditor_TextEntering(object? sender, TextCompositionEventArgs e)
     {
-        if (_completionWindow is null || string.IsNullOrEmpty(e.Text))
+        if (!IsCompletionOverlayVisible() || string.IsNullOrEmpty(e.Text))
         {
             return;
         }
 
         if (!SqlCompletionService.IsCompletionCharacter(e.Text[0]))
         {
-            _completionWindow.CompletionList.RequestInsertion(e);
+            QueryCompletionList.RequestInsertion(e);
         }
     }
 
     private void QueryEditor_PreviewKeyDown(object sender, KeyEventArgs e)
     {
-        if (e.Key == Key.Tab)
+        if (IsCompletionOverlayVisible())
         {
-            if (_completionWindow is not null)
+            if (e.Key is Key.Tab or Key.Enter)
             {
-                _completionWindow.CompletionList.RequestInsertion(e);
-            }
-            else
-            {
-                ShowCompletionWindow();
+                QueryCompletionList.RequestInsertion(e);
+                e.Handled = true;
+                return;
             }
 
+            if (e.Key == Key.Escape)
+            {
+                HideCompletionOverlay();
+                e.Handled = true;
+                return;
+            }
+
+            QueryCompletionList.HandleKey(e);
+            if (e.Handled)
+            {
+                return;
+            }
+        }
+
+        if (e.Key == Key.Tab)
+        {
+            ShowCompletionOverlay();
             e.Handled = true;
             return;
         }
 
         if (e.Key == Key.Space && Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
         {
-            ShowCompletionWindow();
+            ShowCompletionOverlay();
             e.Handled = true;
         }
     }
 
-    private void ShowCompletionWindow()
+    private void ShowCompletionOverlay()
     {
-        _completionWindow?.Close();
-
         var startOffset = SqlCompletionService.GetCompletionStartOffset(QueryEditor.Document, QueryEditor.CaretOffset);
         var prefix = SqlCompletionService.GetPrefix(QueryEditor.Document, QueryEditor.CaretOffset);
         var completionData = _completionService.BuildCompletionData(prefix, QueryEditor.Text);
         if (completionData.Count == 0)
         {
+            HideCompletionOverlay();
             return;
         }
 
-        _completionWindow = new CompletionWindow(QueryEditor.TextArea)
-        {
-            StartOffset = startOffset,
-            EndOffset = QueryEditor.CaretOffset,
-            MinWidth = 260,
-            MaxHeight = 280
-        };
+        _completionStartOffset = startOffset;
+        _completionEndOffset = QueryEditor.CaretOffset;
+        QueryCompletionList.CompletionData.Clear();
 
         foreach (var completion in completionData)
         {
-            _completionWindow.CompletionList.CompletionData.Add(completion);
+            QueryCompletionList.CompletionData.Add(completion);
         }
 
-        _completionWindow.Closed += (_, _) => _completionWindow = null;
-        _completionWindow.Show();
+        QueryCompletionList.SelectedItem = completionData[0];
+        QueryCompletionList.SelectItem(prefix);
+        QueryCompletionOverlay.Visibility = Visibility.Visible;
+        UpdateCompletionOverlayPosition();
+        QueryCompletionOverlay.Dispatcher.BeginInvoke(
+            UpdateCompletionOverlayPosition,
+            DispatcherPriority.Loaded);
+    }
+
+    private void QueryCompletionList_InsertionRequested(object? sender, EventArgs e)
+    {
+        var selectedItem = QueryCompletionList.SelectedItem;
+        HideCompletionOverlay();
+        selectedItem?.Complete(
+            QueryEditor.TextArea,
+            new AnchorSegment(
+                QueryEditor.Document,
+                _completionStartOffset,
+                Math.Max(0, _completionEndOffset - _completionStartOffset)),
+            e);
+        QueryEditor.Focus();
+    }
+
+    private void UpdateCompletionSelectionOrClose()
+    {
+        if (!IsCompletionOverlayVisible())
+        {
+            return;
+        }
+
+        var caretOffset = QueryEditor.CaretOffset;
+        if (caretOffset < _completionStartOffset || caretOffset > QueryEditor.Document.TextLength)
+        {
+            HideCompletionOverlay();
+            return;
+        }
+
+        var prefix = QueryEditor.Document.GetText(_completionStartOffset, caretOffset - _completionStartOffset);
+        if (prefix.Any(character => !SqlCompletionService.IsCompletionCharacter(character)))
+        {
+            HideCompletionOverlay();
+            return;
+        }
+
+        _completionEndOffset = caretOffset;
+        QueryCompletionList.SelectItem(prefix);
+        UpdateCompletionOverlayPosition();
+    }
+
+    private bool IsCompletionOverlayVisible()
+    {
+        return QueryCompletionOverlay.Visibility == Visibility.Visible;
+    }
+
+    private void HideCompletionOverlay()
+    {
+        QueryCompletionOverlay.Visibility = Visibility.Collapsed;
+        QueryCompletionList.CompletionData.Clear();
+    }
+
+    private void UpdateCompletionOverlayPosition()
+    {
+        if (!QueryEditor.IsLoaded || !QueryCompletionLayer.IsLoaded)
+        {
+            return;
+        }
+
+        var caretRectangle = QueryEditor.TextArea.Caret.CalculateCaretRectangle();
+        var textView = QueryEditor.TextArea.TextView;
+        var textViewPoint = new Point(
+            caretRectangle.Left - textView.ScrollOffset.X,
+            caretRectangle.Bottom - textView.ScrollOffset.Y + 2);
+        var overlayPoint = textView.TranslatePoint(textViewPoint, QueryCompletionLayer);
+        var maxLeft = Math.Max(0, QueryCompletionLayer.ActualWidth - QueryCompletionOverlay.Width);
+
+        Canvas.SetLeft(QueryCompletionOverlay, Math.Clamp(overlayPoint.X, 0, maxLeft));
+        Canvas.SetTop(QueryCompletionOverlay, Math.Max(0, overlayPoint.Y));
     }
 
     private void PrepopulateQueryEditorIfPristine(string sql)
     {
-        if (_queryTextEditedByUser)
+        if (_queryTextEditedByUser && !string.IsNullOrWhiteSpace(QueryEditor.Text))
         {
             return;
         }
@@ -930,6 +1211,7 @@ public partial class SessionView : UserControl
         {
             QueryEditor.Text = sql;
             QueryEditor.CaretOffset = 0;
+            _queryTextEditedByUser = false;
         }
         finally
         {
@@ -1068,6 +1350,49 @@ public partial class SessionView : UserControl
         string TableName,
         string? OrderByColumn,
         ListSortDirection? OrderDirection);
+
+    private sealed class QueryExecutionSummary
+    {
+        public DataTable? LastRows { get; private set; }
+        public int InsertedRows { get; private set; }
+        public int ModifiedRows { get; private set; }
+        public int DeletedRows { get; private set; }
+        public int OtherAffectedRows { get; private set; }
+        public int InsertStatementCount { get; private set; }
+        public int UpdateStatementCount { get; private set; }
+        public int DeleteStatementCount { get; private set; }
+        public int OtherStatementCount { get; private set; }
+
+        public void Add(SqlStatement statement, SqlExecutionResult result)
+        {
+            if (statement.Kind == SqlStatementKind.Select || result.Rows.Columns.Count > 0)
+            {
+                LastRows = result.Rows;
+                return;
+            }
+
+            var affectedRows = Math.Max(0, result.RowsAffected);
+            switch (statement.Kind)
+            {
+                case SqlStatementKind.Insert:
+                    InsertStatementCount++;
+                    InsertedRows += affectedRows;
+                    break;
+                case SqlStatementKind.Update:
+                    UpdateStatementCount++;
+                    ModifiedRows += affectedRows;
+                    break;
+                case SqlStatementKind.Delete:
+                    DeleteStatementCount++;
+                    DeletedRows += affectedRows;
+                    break;
+                default:
+                    OtherStatementCount++;
+                    OtherAffectedRows += affectedRows;
+                    break;
+            }
+        }
+    }
 
     private sealed class RunningOperation : IDisposable
     {
