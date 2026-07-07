@@ -22,17 +22,25 @@ public sealed class DatabaseSession : IAsyncDisposable
 
     public async Task OpenAsync(CancellationToken cancellationToken = default)
     {
-        if (Profile.Protocol == ConnectionProtocolKind.SshTunnel)
+        try
         {
-            _tunnel = SshTunnel.Open(Profile);
+            if (Profile.Protocol == ConnectionProtocolKind.SshTunnel)
+            {
+                _tunnel = await SshTunnel.OpenAsync(Profile, cancellationToken);
+            }
+
+            var connectionString = DatabaseConnectionStringFactory.Create(Profile, _tunnel?.LocalPort);
+            _executor = new DatabaseCommandExecutor(connectionString, QueryLog);
+            _metadata = new DatabaseMetadataService(_executor);
+            _tables = new TableDataService(_executor, _metadata);
+
+            await _executor.ExecuteScalarAsync("SELECT VERSION()", _ => { }, cancellationToken);
         }
-
-        var connectionString = DatabaseConnectionStringFactory.Create(Profile, _tunnel?.LocalPort);
-        _executor = new DatabaseCommandExecutor(connectionString, QueryLog);
-        _metadata = new DatabaseMetadataService(_executor);
-        _tables = new TableDataService(_executor, _metadata);
-
-        await _executor.ExecuteScalarAsync("SELECT VERSION()", _ => { }, cancellationToken);
+        catch
+        {
+            await DisposeAsync();
+            throw;
+        }
     }
 
     public Task<IReadOnlyList<string>> LoadSchemasAsync(CancellationToken cancellationToken = default)

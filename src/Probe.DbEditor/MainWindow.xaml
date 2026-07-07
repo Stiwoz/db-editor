@@ -32,7 +32,7 @@
 
     <DockPanel>
         <TabControl x:Name="ConnectionsTab">
-            <TabItem x:Name="ConnectionTab" Header="Connections">
+            <TabItem x:Name="ConnectionTab" Header="Connections" BorderThickness="1,1,1,0">
                 <Grid Margin="16">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="280" />
@@ -186,7 +186,12 @@
                                 </GroupBox>
 
                                 <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
-                                    <Button Content="Connect" Click="Connect_Click" />
+                                    <Button x:Name="TestConnectionButton"
+                                        Content="Test Connection"
+                                        Click="TestConnection_Click" />
+                                    <Button x:Name="ConnectButton"
+                                        Content="Connect"
+                                        Click="Connect_Click" />
                                     <Button Content="Save Profile" Click="SaveProfile_Click" />
                                 </StackPanel>
 

@@ -23,7 +23,7 @@ public sealed class DatabaseCommandExecutor : IDatabaseCommandExecutor
         Action<MySqlCommand> configure,
         CancellationToken cancellationToken)
     {
-        return await ExecuteLoggedAsync(sql, configure, async command =>
+        return await ExecuteLoggedAsync(sql, configure, cancellationToken, async command =>
         {
             var value = await command.ExecuteScalarAsync(cancellationToken);
             return (value, -1);
@@ -44,7 +44,7 @@ public sealed class DatabaseCommandExecutor : IDatabaseCommandExecutor
         Action<MySqlCommand> configure,
         CancellationToken cancellationToken)
     {
-        return await ExecuteLoggedAsync(sql, configure, async command =>
+        return await ExecuteLoggedAsync(sql, configure, cancellationToken, async command =>
         {
             await using var reader = await command.ExecuteReaderAsync(cancellationToken);
             var table = new DataTable();
@@ -58,7 +58,7 @@ public sealed class DatabaseCommandExecutor : IDatabaseCommandExecutor
         Action<MySqlCommand> configure,
         CancellationToken cancellationToken)
     {
-        return await ExecuteLoggedAsync(sql, configure, async command =>
+        return await ExecuteLoggedAsync(sql, configure, cancellationToken, async command =>
         {
             var rowsAffected = await command.ExecuteNonQueryAsync(cancellationToken);
             return (rowsAffected, rowsAffected);
@@ -68,11 +68,12 @@ public sealed class DatabaseCommandExecutor : IDatabaseCommandExecutor
     private async Task<T> ExecuteLoggedAsync<T>(
         string sql,
         Action<MySqlCommand> configure,
+        CancellationToken cancellationToken,
         Func<MySqlCommand, Task<(T Result, int RowsAffected)>> execute)
     {
         var stopwatch = Stopwatch.StartNew();
         await using var connection = new MySqlConnection(_connectionString);
-        await connection.OpenAsync();
+        await connection.OpenAsync(cancellationToken);
         await using var command = new MySqlCommand(sql, connection);
         configure(command);
 

@@ -254,6 +254,17 @@
         <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
     </Style>
 
+    <Style x:Key="SeparatorStyle" TargetType="Separator">
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Separator">
+                    <Border Background="{StaticResource BorderBrush}" />
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+
     <Style TargetType="{x:Type Thumb}">
         <Setter Property="Background" Value="{StaticResource ScrollThumbBrush}" />
         <Setter Property="Template">
@@ -483,9 +494,9 @@
                     <Border x:Name="TabBorder"
                         Background="{TemplateBinding Background}"
                         BorderBrush="{TemplateBinding BorderBrush}"
-                        BorderThickness="1,1,1,0"
-                        CornerRadius="4,4,0,0"
-                        Margin="0,0,2,0"
+                        BorderThickness="1,0,1,0"
+                        CornerRadius="0,0,0,0"
+                        Margin="0,0,0,0"
                         Padding="{TemplateBinding Padding}">
                         <ContentPresenter ContentSource="Header"
                             HorizontalAlignment="Center"
@@ -504,6 +515,8 @@
                                 Value="{StaticResource AccentBrush}" />
                             <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
                             <Setter Property="Panel.ZIndex" Value="1" />
+                            <Setter TargetName="TabBorder" Property="BorderThickness"
+                                Value="1,1,1,0" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -549,6 +562,7 @@
     <Style TargetType="{x:Type DataGrid}">
         <Setter Property="Background" Value="{StaticResource SurfaceMutedBrush}" />
         <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
+        <Setter Property="BorderThickness" Value="0,0,0,0" />
         <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
         <Setter Property="GridLinesVisibility" Value="All" />
         <Setter Property="HeadersVisibility" Value="Column" />
@@ -601,6 +615,7 @@
     <Style TargetType="{x:Type DataGridCell}">
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
+        <Setter Property="BorderThickness" Value="0,1,1,0"/>
         <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
         <Setter Property="Padding" Value="4,2" />
         <Style.Triggers>

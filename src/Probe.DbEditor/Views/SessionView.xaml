@@ -23,15 +23,21 @@
                     DockPanel.Dock="Left"
                     VerticalAlignment="Center"
                     FontWeight="SemiBold"
-                    Margin="0,0,16,0" />
+                    Margin="0,0,0,0" />
                 <StackPanel Orientation="Horizontal" DockPanel.Dock="Right">
-                    <TextBlock VerticalAlignment="Center" Margin="0,0,6,0" Text="Limit" />
-                    <TextBox x:Name="LimitTextBox" Width="72" Text="500" Margin="0,0,8,0" />
+                    <Separator Style="{StaticResource SeparatorStyle}"
+                        Margin="12,0,12,0" Width="1" />
+                    <TextBlock VerticalAlignment="Center" Margin="0,0,6,0" Text="Limit:" />
+                    <TextBox x:Name="LimitTextBox" Width="32" Text="500" Margin="0,0,0,0" />
+                    <Separator Style="{StaticResource SeparatorStyle}"
+                        Margin="12,0,12,0" Width="1" />
                     <CheckBox x:Name="DeferEditsToggle"
                         Content="Review edits before apply"
                         IsChecked="True"
                         VerticalAlignment="Center"
-                        Margin="0,0,12,0" />
+                        Margin="0,0,0,0" />
+                    <Separator Style="{StaticResource SeparatorStyle}"
+                        Margin="12,0,12,0" Width="1" />
                     <Button Content="Refresh" Padding="10,4" Margin="0,0,8,0" Click="Refresh_Click" />
                     <Button Content="Apply Edits" Padding="10,4" Margin="0,0,8,0"
                         Click="ApplyPending_Click" />
@@ -47,11 +53,11 @@
             </Grid.ColumnDefinitions>
 
             <Border Grid.Column="0" BorderBrush="{StaticResource BorderBrush}"
-                BorderThickness="0,0,1,0" Background="{StaticResource SurfaceMutedBrush}">
+                BorderThickness="0,0,0,0" Background="{StaticResource SurfaceMutedBrush}">
                 <DockPanel>
                     <TextBlock DockPanel.Dock="Top" FontWeight="SemiBold" Margin="10" Text="Schemas" />
                     <TreeView x:Name="SchemaTree"
-                        SelectedItemChanged="SchemaTree_SelectedItemChanged" />
+                        SelectedItemChanged="SchemaTree_SelectedItemChanged" BorderThickness="0,1,0,1" />
                 </DockPanel>
             </Border>
 
@@ -73,10 +79,10 @@
                 </TabItem>
 
                 <TabItem Header="Indexes">
-                    <DockPanel Margin="10">
+                    <DockPanel Margin="0">
                         <Border DockPanel.Dock="Top" BorderBrush="{StaticResource BorderBrush}"
                             BorderThickness="0,0,0,1"
-                            Padding="0,0,0,10" Margin="0,0,0,10">
+                            Padding="0,0,0,10" Margin="10,10,10,10">
                             <WrapPanel>
                                 <TextBlock VerticalAlignment="Center" Text="Name" Margin="0,0,6,0" />
                                 <TextBox x:Name="IndexNameTextBox" Width="160" Margin="0,0,12,0" />
@@ -126,20 +132,32 @@
                         <DataGrid.Columns>
                             <DataGridTextColumn Header="#" Binding="{Binding Position}" Width="60" />
                             <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="180" />
-                            <DataGridTextColumn Header="Column Type" Binding="{Binding ColumnType}" Width="180" />
-                            <DataGridTextColumn Header="Data Type" Binding="{Binding DataType}" Width="130" />
-                            <DataGridTextColumn Header="Nullable" Binding="{Binding IsNullable}" Width="90" />
-                            <DataGridTextColumn Header="Default" Binding="{Binding DefaultValue}" Width="160" />
-                            <DataGridTextColumn Header="Char Length" Binding="{Binding CharacterMaximumLength}" Width="110" />
-                            <DataGridTextColumn Header="Precision" Binding="{Binding NumericPrecision}" Width="100" />
-                            <DataGridTextColumn Header="Scale" Binding="{Binding NumericScale}" Width="80" />
-                            <DataGridTextColumn Header="DateTime Precision" Binding="{Binding DateTimePrecision}" Width="140" />
-                            <DataGridTextColumn Header="Charset" Binding="{Binding CharacterSet}" Width="130" />
-                            <DataGridTextColumn Header="Collation" Binding="{Binding Collation}" Width="180" />
+                            <DataGridTextColumn Header="Column Type" Binding="{Binding ColumnType}"
+                                Width="180" />
+                            <DataGridTextColumn Header="Data Type" Binding="{Binding DataType}"
+                                Width="130" />
+                            <DataGridTextColumn Header="Nullable" Binding="{Binding IsNullable}"
+                                Width="90" />
+                            <DataGridTextColumn Header="Default" Binding="{Binding DefaultValue}"
+                                Width="160" />
+                            <DataGridTextColumn Header="Char Length"
+                                Binding="{Binding CharacterMaximumLength}" Width="110" />
+                            <DataGridTextColumn Header="Precision"
+                                Binding="{Binding NumericPrecision}" Width="100" />
+                            <DataGridTextColumn Header="Scale" Binding="{Binding NumericScale}"
+                                Width="80" />
+                            <DataGridTextColumn Header="DateTime Precision"
+                                Binding="{Binding DateTimePrecision}" Width="140" />
+                            <DataGridTextColumn Header="Charset" Binding="{Binding CharacterSet}"
+                                Width="130" />
+                            <DataGridTextColumn Header="Collation" Binding="{Binding Collation}"
+                                Width="180" />
                             <DataGridTextColumn Header="Key" Binding="{Binding Key}" Width="80" />
                             <DataGridTextColumn Header="Extra" Binding="{Binding Extra}" Width="180" />
-                            <DataGridTextColumn Header="Comment" Binding="{Binding Comment}" Width="220" />
-                            <DataGridTextColumn Header="Generation Expression" Binding="{Binding GenerationExpression}" Width="240" />
+                            <DataGridTextColumn Header="Comment" Binding="{Binding Comment}"
+                                Width="220" />
+                            <DataGridTextColumn Header="Generation Expression"
+                                Binding="{Binding GenerationExpression}" Width="240" />
                         </DataGrid.Columns>
                     </DataGrid>
                 </TabItem>

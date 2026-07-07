@@ -30,6 +30,7 @@ public partial class MainWindow : Window
     ];
 
     private ConnectionProfile? _selectedProfile;
+    private bool _connectionOperationInProgress;
 
     public MainWindow()
     {
@@ -145,6 +146,11 @@ public partial class MainWindow : Window
         await ConnectCurrentProfileAsync();
     }
 
+    private async void TestConnection_Click(object sender, RoutedEventArgs e)
+    {
+        await TestCurrentProfileAsync();
+    }
+
     private async void SavedProfilesList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
     {
         if (SavedProfilesList.SelectedItem is not null)
@@ -155,34 +161,93 @@ public partial class MainWindow : Window
 
     private async Task ConnectCurrentProfileAsync()
     {
+        var profile = ReadProfileFromForm(includeSecrets: true);
+        await RunConnectionOperationAsync(profile, "Connecting...", async cancellationToken =>
+        {
+            var session = await OpenSessionAsync(profile, cancellationToken);
+
+            try
+            {
+                var view = new SessionView(session);
+                var tab = new TabItem { Content = view };
+                tab.Header = CreateConnectionTabHeader(profile.Name, tab);
+                tab.PreviewMouseDown += ConnectionTab_PreviewMouseDown;
+
+                ConnectionsTab.Items.Add(tab);
+                ConnectionsTab.SelectedItem = tab;
+                ConnectionStatusText.Text = "Connected.";
+            }
+            catch
+            {
+                await session.DisposeAsync();
+                throw;
+            }
+        });
+    }
+
+    private async Task TestCurrentProfileAsync()
+    {
+        var profile = ReadProfileFromForm(includeSecrets: true);
+        await RunConnectionOperationAsync(profile, "Testing connection...", async cancellationToken =>
+        {
+            await using var session = await OpenSessionAsync(profile, cancellationToken);
+            ConnectionStatusText.Text = "Connection test succeeded.";
+        });
+    }
+
+    private async Task<DatabaseSession> OpenSessionAsync(
+        ConnectionProfile profile,
+        CancellationToken cancellationToken)
+    {
+        var session = new DatabaseSession(profile);
+        await session.OpenAsync(cancellationToken);
+        return session;
+    }
+
+    private async Task RunConnectionOperationAsync(
+        ConnectionProfile profile,
+        string progressMessage,
+        Func<CancellationToken, Task> operation)
+    {
+        if (_connectionOperationInProgress)
+        {
+            return;
+        }
+
+        _connectionOperationInProgress = true;
+        SetConnectionButtonsEnabled(false);
+        ConnectionStatusText.Text = progressMessage;
+
+        using var cancellation = new CancellationTokenSource(ConnectionAttemptDefaults.Timeout);
         try
         {
-            ConnectionStatusText.Text = "Connecting...";
-            var profile = ReadProfileFromForm(includeSecrets: true);
-            var session = new DatabaseSession(profile);
-            await session.OpenAsync();
-
-            var view = new SessionView(session);
-            var tab = new TabItem { Content = view };
-            tab.Header = CreateConnectionTabHeader(profile.Name, tab);
-            tab.PreviewMouseDown += ConnectionTab_PreviewMouseDown;
-
-            ConnectionsTab.Items.Add(tab);
-            ConnectionsTab.SelectedItem = tab;
-            ConnectionStatusText.Text = "Connected.";
+            await operation(cancellation.Token);
         }
         catch (Exception ex)
         {
-            ConnectionStatusText.Text = ex.Message;
+            ConnectionStatusText.Text = ConnectionFailureMessage.Create(ex, profile.Protocol);
         }
+        finally
+        {
+            SetConnectionButtonsEnabled(true);
+            _connectionOperationInProgress = false;
+        }
+    }
+
+    private void SetConnectionButtonsEnabled(bool isEnabled)
+    {
+        TestConnectionButton.IsEnabled = isEnabled;
+        ConnectButton.IsEnabled = isEnabled;
     }
 
     private DockPanel CreateConnectionTabHeader(string title, TabItem tab)
     {
-        var panel = new DockPanel { LastChildFill = false };
+        var panel = new DockPanel { LastChildFill = false, };
+
         var closeButton = new Button
         {
-            Content = "×",
+            Content = "x",
+            // Content = "×",
             Width = 22,
             Height = 22,
             Padding = new Thickness(0),

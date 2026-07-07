@@ -29,6 +29,7 @@ public sealed class DatabaseConnectionStringFactoryTests
         Assert.AreEqual("app", builder.Database);
         Assert.AreEqual(MySqlConnectionProtocol.Socket, builder.ConnectionProtocol);
         Assert.AreEqual(MySqlSslMode.VerifyFull, builder.SslMode);
+        Assert.AreEqual(10u, builder.ConnectionTimeout);
         Assert.IsTrue(builder.AllowUserVariables);
         Assert.IsFalse(builder.PersistSecurityInfo);
     }

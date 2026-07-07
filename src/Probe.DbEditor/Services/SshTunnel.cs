@@ -17,7 +17,9 @@ public sealed class SshTunnel : IDisposable
 
     public uint LocalPort => _forwardedPort.BoundPort;
 
-    public static SshTunnel Open(ConnectionProfile profile)
+    public static async Task<SshTunnel> OpenAsync(
+        ConnectionProfile profile,
+        CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(profile.SshHost))
         {
@@ -55,6 +57,7 @@ public sealed class SshTunnel : IDisposable
             (int)profile.SshPort,
             profile.SshUserName,
             authenticationMethods.ToArray());
+        connectionInfo.Timeout = ConnectionAttemptDefaults.Timeout;
 
         var client = new SshClient(connectionInfo);
         if (!string.IsNullOrWhiteSpace(profile.SshHostKeyFingerprint))
@@ -65,18 +68,26 @@ public sealed class SshTunnel : IDisposable
             };
         }
 
-        client.Connect();
+        try
+        {
+            await client.ConnectAsync(cancellationToken);
 
-        var databaseHost = string.IsNullOrWhiteSpace(profile.SshDatabaseHost)
-            ? "127.0.0.1"
-            : profile.SshDatabaseHost;
-        var databasePort = profile.SshDatabasePort == 0 ? 3306 : profile.SshDatabasePort;
+            var databaseHost = string.IsNullOrWhiteSpace(profile.SshDatabaseHost)
+                ? "127.0.0.1"
+                : profile.SshDatabaseHost;
+            var databasePort = profile.SshDatabasePort == 0 ? 3306 : profile.SshDatabasePort;
 
-        var forwardedPort = new ForwardedPortLocal("127.0.0.1", databaseHost, databasePort);
-        client.AddForwardedPort(forwardedPort);
-        forwardedPort.Start();
+            var forwardedPort = new ForwardedPortLocal("127.0.0.1", databaseHost, databasePort);
+            client.AddForwardedPort(forwardedPort);
+            forwardedPort.Start();
 
-        return new SshTunnel(client, forwardedPort);
+            return new SshTunnel(client, forwardedPort);
+        }
+        catch
+        {
+            client.Dispose();
+            throw;
+        }
     }
 
     public void Dispose()

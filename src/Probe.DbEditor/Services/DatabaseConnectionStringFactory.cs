@@ -14,6 +14,7 @@ public static class DatabaseConnectionStringFactory
             ApplicationName = "Probe.DbEditor",
             AllowUserVariables = true,
             PersistSecurityInfo = false,
+            ConnectionTimeout = ConnectionAttemptDefaults.TimeoutSeconds,
             SslMode = MapTlsMode(profile.TlsMode)
         };
 
