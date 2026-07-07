@@ -288,17 +288,17 @@
             </TabControl>
         </Grid>
 
-        <GroupBox Grid.Row="2" Header="Pending Edits" Margin="8">
+        <GroupBox Grid.Row="2" Header="Pending Edits" Margin="0" Padding="0" BorderThickness="0">
             <DataGrid x:Name="PendingEditsGrid"
                 AutoGenerateColumns="False"
                 IsReadOnly="True"
                 EnableRowVirtualization="True">
                 <DataGrid.Columns>
                     <DataGridTextColumn Header="Schema" Binding="{Binding SchemaName}" Width="140" />
-                    <DataGridTextColumn Header="Table" Binding="{Binding TableName}" Width="140" />
+                    <DataGridTextColumn Header="Table" Binding="{Binding TableName}" Width="200" />
                     <DataGridTextColumn Header="Column" Binding="{Binding ColumnName}" Width="140" />
-                    <DataGridTextColumn Header="Old" Binding="{Binding OldValueText}" Width="180" />
-                    <DataGridTextColumn Header="New" Binding="{Binding NewValueText}" Width="180" />
+                    <DataGridTextColumn Header="Old" Binding="{Binding OldValueText}" Width="220" />
+                    <DataGridTextColumn Header="New" Binding="{Binding NewValueText}" Width="220" />
                     <DataGridTextColumn Header="Key" Binding="{Binding KeyDisplay}" Width="*" />
                 </DataGrid.Columns>
             </DataGrid>

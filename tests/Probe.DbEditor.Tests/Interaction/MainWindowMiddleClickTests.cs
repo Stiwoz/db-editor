@@ -1,3 +1,7 @@
+using System.Reflection;
+using Probe.DbEditor;
+using Probe.DbEditor.Models;
+
 namespace Probe.DbEditor.Tests.Interaction;
 
 [TestClass]
@@ -20,8 +24,24 @@ public sealed class MainWindowMiddleClickTests
             new("tab\\.PreviewMouseDown\\s*\\+="));
     }
 
+    [TestMethod]
+    public void MainWindow_ConnectionOptionModels_RenderReadableLabels()
+    {
+        AssertOptionToString("ProtocolOption", "TCP/IP", ConnectionProtocolKind.Tcp);
+        AssertOptionToString("TlsOption", "Verify full certificate", DatabaseTlsMode.VerifyFull);
+    }
+
     private static Task<string> ReadFixtureAsync(string fileName)
     {
         return File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "Fixtures", fileName));
+    }
+
+    private static void AssertOptionToString<TValue>(string nestedTypeName, string label, TValue value)
+    {
+        var optionType = typeof(MainWindow).GetNestedType(nestedTypeName, BindingFlags.NonPublic);
+        Assert.IsNotNull(optionType, $"Missing nested option type: {nestedTypeName}");
+
+        var option = Activator.CreateInstance(optionType, label, value);
+        Assert.AreEqual(label, option?.ToString());
     }
 }

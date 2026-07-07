@@ -394,7 +394,19 @@ public partial class MainWindow : Window
         target.SshDatabasePort = source.SshDatabasePort;
     }
 
-    private sealed record ProtocolOption(string Label, ConnectionProtocolKind Protocol);
+    private sealed record ProtocolOption(string Label, ConnectionProtocolKind Protocol)
+    {
+        public override string ToString()
+        {
+            return Label;
+        }
+    }
 
-    private sealed record TlsOption(string Label, DatabaseTlsMode TlsMode);
+    private sealed record TlsOption(string Label, DatabaseTlsMode TlsMode)
+    {
+        public override string ToString()
+        {
+            return Label;
+        }
+    }
 }

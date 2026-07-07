@@ -153,7 +153,7 @@ public partial class SessionView : UserControl
         await LoadTableAsync(_currentTable.SchemaName, _currentTable.TableName, columnName, direction);
     }
 
-    private void TableDataGrid_CellEditEnding(object sender, DataGridCellEditEndingEventArgs e)
+    private async void TableDataGrid_CellEditEnding(object sender, DataGridCellEditEndingEventArgs e)
     {
         if (e.EditAction != DataGridEditAction.Commit || _currentTable is null)
         {
@@ -172,6 +172,7 @@ public partial class SessionView : UserControl
         }
 
         _pendingEditCandidate = new PendingEditCandidate(rowView.Row, columnName);
+        await CapturePendingCellEditAsync();
     }
 
     private void TableDataGrid_PreparingCellForEdit(object sender, DataGridPreparingCellForEditEventArgs e)
@@ -186,6 +187,11 @@ public partial class SessionView : UserControl
     }
 
     private async void TableDataGrid_CurrentCellChanged(object sender, EventArgs e)
+    {
+        await CapturePendingCellEditAsync();
+    }
+
+    private async Task CapturePendingCellEditAsync()
     {
         if (_isCapturingEdit || _pendingEditCandidate is null)
         {
