@@ -37,6 +37,7 @@ public sealed class MainWindowMiddleClickTests
         StringAssert.Contains(mainWindowXaml, "FavoriteRootDropPreview");
         StringAssert.Contains(mainWindowXaml, "FavoriteDragPreviewPopup");
         StringAssert.Contains(mainWindowXaml, "IsHitTestVisible=\"False\"");
+        StringAssert.Contains(mainWindowXaml, "IsHitTestVisible=\"True\"");
         StringAssert.Contains(mainWindowXaml, "ProfileColorList");
         StringAssert.Contains(mainWindowXaml, "FolderDetailPanel");
         StringAssert.Contains(mainWindowXaml, "FolderColorList");
@@ -71,6 +72,9 @@ public sealed class MainWindowMiddleClickTests
         StringAssert.Contains(mainWindowCode, "TryResolveCachedProfileDropTarget");
         StringAssert.Contains(mainWindowCode, "TryResolveCachedFolderDropTarget");
         StringAssert.Contains(mainWindowCode, "IsPointerWithinCachedDropPreviewBand");
+        StringAssert.Contains(mainWindowCode, "IsPointerWithinElementBounds");
+        StringAssert.Contains(mainWindowCode, "\"DropPreviewBefore\"");
+        StringAssert.Contains(mainWindowCode, "\"DropPreviewAfter\"");
         StringAssert.Contains(mainWindowCode, "FavoriteDropPreviewHitBuffer");
         StringAssert.Contains(mainWindowCode, "FindVisualDescendantByName<FrameworkElement>(targetTreeItem, \"ItemRow\")");
         StringAssert.Contains(mainWindowCode, "rowPosition.Y < 0 || rowPosition.Y > itemRow.ActualHeight");

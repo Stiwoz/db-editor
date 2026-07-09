@@ -1394,23 +1394,28 @@ public partial class MainWindow : Window
             return false;
         }
 
+        var previewName = placement switch
+        {
+            FavoriteDropPreviewPlacement.Before => "DropPreviewBefore",
+            FavoriteDropPreviewPlacement.After => "DropPreviewAfter",
+            _ => ""
+        };
+        if (!string.IsNullOrEmpty(previewName) &&
+            FindVisualDescendantByName<FrameworkElement>(treeItem, previewName) is { IsVisible: true } preview &&
+            IsPointerWithinElementBounds(e, preview))
+        {
+            return true;
+        }
+
         var itemRow = FindVisualDescendantByName<FrameworkElement>(treeItem, "ItemRow");
         if (itemRow is null)
         {
             var position = e.GetPosition(treeItem);
-            return position.X >= 0 &&
-                   position.X <= treeItem.ActualWidth &&
-                   position.Y >= -FavoriteDropPreviewHitBuffer &&
+            return position.Y >= -FavoriteDropPreviewHitBuffer &&
                    position.Y <= treeItem.ActualHeight + FavoriteDropPreviewHitBuffer;
         }
 
         var rowPosition = e.GetPosition(itemRow);
-        if (rowPosition.X < 0 ||
-            rowPosition.X > itemRow.ActualWidth)
-        {
-            return false;
-        }
-
         return placement switch
         {
             FavoriteDropPreviewPlacement.Before => rowPosition.Y < 0 &&
@@ -1419,6 +1424,15 @@ public partial class MainWindow : Window
                                                   rowPosition.Y <= itemRow.ActualHeight + FavoriteDropPreviewHitBuffer,
             _ => false
         };
+    }
+
+    private static bool IsPointerWithinElementBounds(DragEventArgs e, FrameworkElement element)
+    {
+        var position = e.GetPosition(element);
+        return position.X >= 0 &&
+               position.X <= element.ActualWidth &&
+               position.Y >= 0 &&
+               position.Y <= element.ActualHeight;
     }
 
     private static TreeViewItem? FindFavoriteTreeViewItem(
