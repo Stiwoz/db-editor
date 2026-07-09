@@ -28,6 +28,9 @@
     <None Include="..\..\src\Probe.DbEditor\MainWindow.xaml.cs"
         Link="Fixtures\MainWindow.xaml.cs"
         CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\src\Probe.DbEditor\Behaviors\MiddleClickScrollBehavior.cs"
+        Link="Fixtures\MiddleClickScrollBehavior.cs"
+        CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\..\src\Probe.DbEditor\Views\SessionView.xaml.cs"
         Link="Fixtures\SessionView.xaml.cs"
         CopyToOutputDirectory="PreserveNewest" />

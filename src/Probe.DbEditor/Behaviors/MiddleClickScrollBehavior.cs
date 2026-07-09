@@ -13,6 +13,7 @@ public static class MiddleClickScrollBehavior
     private const double DeadZone = 12;
     private const double MaxPixelsPerTick = 48;
     private const double PixelsPerTickRatio = 0.18;
+    private const double HorizontalWheelPixelsPerLine = 48;
 
     public static readonly DependencyProperty IsEnabledProperty =
         DependencyProperty.RegisterAttached(
@@ -57,7 +58,7 @@ public static class MiddleClickScrollBehavior
         uiElement.ClearValue(StateProperty);
     }
 
-    private static ScrollViewer? FindScrollableViewer(object? originalSource)
+    private static ScrollViewer? FindScrollableViewer(object? originalSource, ScrollDirection direction)
     {
         var current = originalSource as DependencyObject;
         while (current is not null)
@@ -67,7 +68,7 @@ public static class MiddleClickScrollBehavior
                 return null;
             }
 
-            if (current is ScrollViewer viewer && CanScroll(viewer))
+            if (current is ScrollViewer viewer && CanScroll(viewer, direction))
             {
                 return viewer;
             }
@@ -78,9 +79,13 @@ public static class MiddleClickScrollBehavior
         return null;
     }
 
-    private static bool CanScroll(ScrollViewer viewer)
+    private static bool CanScroll(ScrollViewer viewer, ScrollDirection direction)
     {
-        return viewer.ScrollableHeight > 0 || viewer.ScrollableWidth > 0;
+        return direction switch
+        {
+            ScrollDirection.Horizontal => viewer.ScrollableWidth > 0,
+            _ => viewer.ScrollableHeight > 0 || viewer.ScrollableWidth > 0
+        };
     }
 
     private static DependencyObject? GetParent(DependencyObject current)
@@ -108,6 +113,22 @@ public static class MiddleClickScrollBehavior
 
         var velocity = (magnitude - DeadZone) * PixelsPerTickRatio;
         return Math.Sign(distance) * Math.Min(MaxPixelsPerTick, velocity);
+    }
+
+    private static bool IsShiftPressed()
+    {
+        return Keyboard.IsKeyDown(Key.LeftShift) || Keyboard.IsKeyDown(Key.RightShift);
+    }
+
+    private static double ComputeHorizontalWheelDistance(int wheelDelta)
+    {
+        return wheelDelta / (double)Mouse.MouseWheelDeltaForOneLine * HorizontalWheelPixelsPerLine;
+    }
+
+    private enum ScrollDirection
+    {
+        Any,
+        Horizontal
     }
 
     private sealed class MiddleClickScrollState
@@ -140,6 +161,7 @@ public static class MiddleClickScrollBehavior
             }
 
             _root.PreviewMouseDown += OnPreviewMouseDown;
+            _root.PreviewMouseUp += OnPreviewMouseUp;
             _root.PreviewMouseMove += OnPreviewMouseMove;
             _root.PreviewMouseWheel += OnPreviewMouseWheel;
             _root.PreviewKeyDown += OnPreviewKeyDown;
@@ -156,6 +178,7 @@ public static class MiddleClickScrollBehavior
 
             Stop();
             _root.PreviewMouseDown -= OnPreviewMouseDown;
+            _root.PreviewMouseUp -= OnPreviewMouseUp;
             _root.PreviewMouseMove -= OnPreviewMouseMove;
             _root.PreviewMouseWheel -= OnPreviewMouseWheel;
             _root.PreviewKeyDown -= OnPreviewKeyDown;
@@ -167,8 +190,11 @@ public static class MiddleClickScrollBehavior
         {
             if (_isActive)
             {
-                Stop();
-                e.Handled = true;
+                if (e.ChangedButton == MouseButton.Middle)
+                {
+                    e.Handled = true;
+                }
+
                 return;
             }
 
@@ -177,13 +203,24 @@ public static class MiddleClickScrollBehavior
                 return;
             }
 
-            var viewer = FindScrollableViewer(e.OriginalSource);
+            var viewer = FindScrollableViewer(e.OriginalSource, ScrollDirection.Any);
             if (viewer is null)
             {
                 return;
             }
 
             Start(viewer, e);
+            e.Handled = true;
+        }
+
+        private void OnPreviewMouseUp(object sender, MouseButtonEventArgs e)
+        {
+            if (e.ChangedButton != MouseButton.Middle || !_isActive)
+            {
+                return;
+            }
+
+            Stop();
             e.Handled = true;
         }
 
@@ -202,12 +239,28 @@ public static class MiddleClickScrollBehavior
 
         private void OnPreviewMouseWheel(object sender, MouseWheelEventArgs e)
         {
-            if (!_isActive)
+            if (_isActive)
+            {
+                e.Handled = true;
+                return;
+            }
+
+            if (!IsShiftPressed())
             {
                 return;
             }
 
-            Stop();
+            var viewer = FindScrollableViewer(e.OriginalSource, ScrollDirection.Horizontal);
+            if (viewer is null)
+            {
+                return;
+            }
+
+            var offset = Math.Clamp(
+                viewer.HorizontalOffset - ComputeHorizontalWheelDistance(e.Delta),
+                0,
+                viewer.ScrollableWidth);
+            viewer.ScrollToHorizontalOffset(offset);
             e.Handled = true;
         }
 
@@ -232,7 +285,7 @@ public static class MiddleClickScrollBehavior
 
         private void OnTimerTick(object? sender, EventArgs e)
         {
-            if (_viewer is null || !_viewer.IsVisible)
+            if (_viewer is null || !_viewer.IsVisible || Mouse.MiddleButton != MouseButtonState.Pressed)
             {
                 Stop();
                 return;

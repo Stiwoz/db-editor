@@ -25,6 +25,40 @@ public sealed class MainWindowMiddleClickTests
     }
 
     [TestMethod]
+    public async Task MiddleClickScrollBehavior_StopsWhenMiddleButtonIsReleased()
+    {
+        var source = await ReadFixtureAsync("MiddleClickScrollBehavior.cs");
+        var mouseDownHandler = SliceBetween(
+            source,
+            "private void OnPreviewMouseDown",
+            "private void OnPreviewMouseUp");
+
+        StringAssert.Contains(source, "_root.PreviewMouseUp += OnPreviewMouseUp;");
+        StringAssert.Contains(source, "_root.PreviewMouseUp -= OnPreviewMouseUp;");
+        StringAssert.Contains(source, "private void OnPreviewMouseUp(object sender, MouseButtonEventArgs e)");
+        StringAssert.Contains(source, "e.ChangedButton != MouseButton.Middle || !_isActive");
+        StringAssert.Contains(source, "Mouse.MiddleButton != MouseButtonState.Pressed");
+        Assert.IsFalse(mouseDownHandler.Contains("Stop();", StringComparison.Ordinal));
+    }
+
+    [TestMethod]
+    public async Task MiddleClickScrollBehavior_ShiftWheelScrollsHorizontallyWithoutAffectingMiddlePressScroll()
+    {
+        var source = await ReadFixtureAsync("MiddleClickScrollBehavior.cs");
+        var mouseWheelHandler = SliceBetween(
+            source,
+            "private void OnPreviewMouseWheel",
+            "private void OnPreviewKeyDown");
+
+        StringAssert.Contains(source, "private static bool IsShiftPressed()");
+        StringAssert.Contains(source, "Keyboard.IsKeyDown(Key.LeftShift) || Keyboard.IsKeyDown(Key.RightShift)");
+        StringAssert.Contains(source, "FindScrollableViewer(e.OriginalSource, ScrollDirection.Horizontal)");
+        StringAssert.Contains(source, "viewer.ScrollToHorizontalOffset(offset);");
+        StringAssert.Contains(source, "viewer.HorizontalOffset - ComputeHorizontalWheelDistance(e.Delta)");
+        Assert.IsFalse(mouseWheelHandler.Contains("Stop();", StringComparison.Ordinal));
+    }
+
+    [TestMethod]
     public void MainWindow_ConnectionOptionModels_RenderReadableLabels()
     {
         AssertOptionToString("ProtocolOption", "TCP/IP", ConnectionProtocolKind.Tcp);
@@ -34,6 +68,16 @@ public sealed class MainWindowMiddleClickTests
     private static Task<string> ReadFixtureAsync(string fileName)
     {
         return File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "Fixtures", fileName));
+    }
+
+    private static string SliceBetween(string source, string startMarker, string endMarker)
+    {
+        var startIndex = source.IndexOf(startMarker, StringComparison.Ordinal);
+        var endIndex = source.IndexOf(endMarker, startIndex, StringComparison.Ordinal);
+        Assert.IsTrue(startIndex >= 0, $"Missing marker: {startMarker}");
+        Assert.IsTrue(endIndex > startIndex, $"Missing marker: {endMarker}");
+
+        return source[startIndex..endIndex];
     }
 
     private static void AssertOptionToString<TValue>(string nestedTypeName, string label, TValue value)
