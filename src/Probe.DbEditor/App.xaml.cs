@@ -1,12 +1,16 @@
 using System.IO;
 using System.Text;
 using System.Windows;
+using System.Windows.Interop;
+using System.Windows.Media;
 using System.Windows.Threading;
 
 namespace Probe.DbEditor;
 
 public partial class App : Application
 {
+    private const string EnableHardwareRenderingVariable = "PROBE_DB_EDITOR_ENABLE_HARDWARE_RENDERING";
+
     private static readonly string StartupLogPath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "ProbeDbEditor",
@@ -14,9 +18,22 @@ public partial class App : Application
 
     public App()
     {
+        ConfigureProcessRendering();
         DispatcherUnhandledException += App_DispatcherUnhandledException;
         AppDomain.CurrentDomain.UnhandledException += CurrentDomain_UnhandledException;
         TaskScheduler.UnobservedTaskException += TaskScheduler_UnobservedTaskException;
+    }
+
+    private static void ConfigureProcessRendering()
+    {
+        var enableHardwareRendering = Environment.GetEnvironmentVariable(EnableHardwareRenderingVariable);
+        if (string.Equals(enableHardwareRendering, "1", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(enableHardwareRendering, "true", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        RenderOptions.ProcessRenderMode = RenderMode.SoftwareOnly;
     }
 
     protected override void OnStartup(StartupEventArgs e)
