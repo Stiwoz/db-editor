@@ -1,8 +1,10 @@
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using Microsoft.Win32;
 using Probe.DbEditor.Models;
 using Probe.DbEditor.Services;
 using Probe.DbEditor.Themes;
@@ -149,6 +151,36 @@ public partial class MainWindow : Window
     private async void TestConnection_Click(object sender, RoutedEventArgs e)
     {
         await TestCurrentProfileAsync();
+    }
+
+    private void BrowseSshKey_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new OpenFileDialog
+        {
+            Title = "Select SSH private key",
+            AddExtension = false,
+            CheckFileExists = true,
+            CheckPathExists = true,
+            Multiselect = false,
+            ShowHiddenItems = true
+        };
+
+        var currentPath = SshKeyPathTextBox.Text.Trim();
+        var initialDirectory = FindInitialPrivateKeyDirectory(currentPath);
+        if (!string.IsNullOrEmpty(initialDirectory))
+        {
+            dialog.InitialDirectory = initialDirectory;
+        }
+
+        if (!string.IsNullOrWhiteSpace(currentPath))
+        {
+            dialog.FileName = Path.GetFileName(currentPath);
+        }
+
+        if (dialog.ShowDialog(this) == true)
+        {
+            SshKeyPathTextBox.Text = dialog.FileName;
+        }
     }
 
     private async void SavedProfilesList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
@@ -319,9 +351,6 @@ public partial class MainWindow : Window
         SaveSshPasswordCheckBox.IsChecked = profile.SaveSshPassword;
         SshKeyPathTextBox.Text = profile.SshPrivateKeyPath;
         SshKeyPassphraseBox.Password = profile.SshPrivateKeyPassphrase;
-        SshHostKeyFingerprintTextBox.Text = profile.SshHostKeyFingerprint;
-        SshDatabaseHostTextBox.Text = profile.SshDatabaseHost;
-        SshDatabasePortTextBox.Text = profile.SshDatabasePort.ToString();
         ProtocolCombo.SelectedItem = _protocolOptions.First(option => option.Protocol == profile.Protocol);
     }
 
@@ -345,9 +374,6 @@ public partial class MainWindow : Window
         profile.SaveSshPassword = SaveSshPasswordCheckBox.IsChecked == true;
         profile.SshPrivateKeyPath = SshKeyPathTextBox.Text.Trim();
         profile.SshPrivateKeyPassphrase = includeSecrets ? SshKeyPassphraseBox.Password : "";
-        profile.SshHostKeyFingerprint = SshHostKeyFingerprintTextBox.Text.Trim();
-        profile.SshDatabaseHost = string.IsNullOrWhiteSpace(SshDatabaseHostTextBox.Text) ? "127.0.0.1" : SshDatabaseHostTextBox.Text.Trim();
-        profile.SshDatabasePort = ParseUInt(SshDatabasePortTextBox.Text, 3306);
         return profile;
     }
 
@@ -370,6 +396,29 @@ public partial class MainWindow : Window
         return uint.TryParse(text, out var value) && value > 0 ? value : fallback;
     }
 
+    private static string FindInitialPrivateKeyDirectory(string currentPath)
+    {
+        if (!string.IsNullOrWhiteSpace(currentPath))
+        {
+            if (Directory.Exists(currentPath))
+            {
+                return currentPath;
+            }
+
+            var parentDirectory = Path.GetDirectoryName(currentPath);
+            if (!string.IsNullOrWhiteSpace(parentDirectory) &&
+                Directory.Exists(parentDirectory))
+            {
+                return parentDirectory;
+            }
+        }
+
+        var sshDirectory = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            ".ssh");
+        return Directory.Exists(sshDirectory) ? sshDirectory : "";
+    }
+
     private static void CopyProfile(ConnectionProfile source, ConnectionProfile target)
     {
         target.Name = source.Name;
@@ -389,9 +438,6 @@ public partial class MainWindow : Window
         target.SaveSshPassword = source.SaveSshPassword;
         target.SshPrivateKeyPath = source.SshPrivateKeyPath;
         target.SshPrivateKeyPassphrase = source.SshPrivateKeyPassphrase;
-        target.SshHostKeyFingerprint = source.SshHostKeyFingerprint;
-        target.SshDatabaseHost = source.SshDatabaseHost;
-        target.SshDatabasePort = source.SshDatabasePort;
     }
 
     private sealed record ProtocolOption(string Label, ConnectionProtocolKind Protocol)

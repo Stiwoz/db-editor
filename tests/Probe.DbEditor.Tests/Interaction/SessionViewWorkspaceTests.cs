@@ -30,17 +30,19 @@ public sealed class SessionViewWorkspaceTests
         StringAssert.Contains(xaml, "AutoGenerateColumns=\"False\"");
         StringAssert.Contains(xaml, "Visibility=\"Collapsed\"");
         StringAssert.Contains(source, "HideQueryResults();");
-        StringAssert.Contains(source, "ShowQueryResults(summary.LastRows);");
+        StringAssert.Contains(source, "ShowQueryResults(summary.LastRows, summary.LastRowsOrdering);");
         AssertInOrder(
             showQueryResults,
             "QueryResultGrid.ItemsSource = null;",
             "QueryResultGrid.Columns.Clear();",
-            "CreateQueryResultColumns(rows);",
+            "CreateQueryResultColumns(rows, ordering);",
             "QueryResultGrid.Visibility = Visibility.Visible;",
             "QueryResultGrid.ItemsSource = rows.DefaultView;",
             "QueryResultGrid.Items.Refresh();");
-        StringAssert.Contains(source, "private void CreateQueryResultColumns(DataTable rows)");
+        StringAssert.Contains(source, "private void CreateQueryResultColumns(DataTable rows, IReadOnlyList<SqlOrderByColumn> ordering)");
         StringAssert.Contains(source, "Header = column.ColumnName,");
+        StringAssert.Contains(source, "SortDirection = FindQuerySortDirection(column.ColumnName, ordering),");
+        StringAssert.Contains(source, "LastRowsOrdering = SqlOrderByParser.Parse(statement.Text);");
         StringAssert.Contains(source, "Binding = new Binding($\"[{column.ColumnName}]\")");
     }
 
@@ -97,7 +99,7 @@ public sealed class SessionViewWorkspaceTests
         AssertInOrder(
             executionResult,
             "if (summary.LastRows is not null)",
-            "ShowQueryResults(summary.LastRows);",
+            "ShowQueryResults(summary.LastRows, summary.LastRowsOrdering);",
             "return;",
             "HideQueryResults();",
             "QueryStatusText.Text = FormatAffectedRows(summary);");

@@ -159,30 +159,25 @@
                                         </Grid>
 
                                         <TextBlock Text="Private key path" />
-                                        <TextBox x:Name="SshKeyPathTextBox" />
-
-                                        <TextBlock Text="Private key passphrase" />
-                                        <PasswordBox x:Name="SshKeyPassphraseBox" />
-
-                                        <TextBlock
-                                            Text="Expected SSH host key fingerprint (SHA256 or MD5)" />
-                                        <TextBox x:Name="SshHostKeyFingerprintTextBox" />
-
                                         <Grid>
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="*" />
-                                                <ColumnDefinition Width="16" />
-                                                <ColumnDefinition Width="160" />
+                                                <ColumnDefinition Width="8" />
+                                                <ColumnDefinition Width="Auto" />
                                             </Grid.ColumnDefinitions>
-                                            <StackPanel Grid.Column="0">
-                                                <TextBlock Text="Database host from SSH server" />
-                                                <TextBox x:Name="SshDatabaseHostTextBox" />
-                                            </StackPanel>
-                                            <StackPanel Grid.Column="2">
-                                                <TextBlock Text="Database port" />
-                                                <TextBox x:Name="SshDatabasePortTextBox" />
-                                            </StackPanel>
+                                            <TextBox x:Name="SshKeyPathTextBox" />
+                                            <Button x:Name="BrowseSshKeyButton"
+                                                Grid.Column="2"
+                                                Content="..."
+                                                MinWidth="44"
+                                                Margin="0,3,0,9"
+                                                Padding="10,5"
+                                                ToolTip="Browse for an SSH private key file."
+                                                Click="BrowseSshKey_Click" />
                                         </Grid>
+
+                                        <TextBlock Text="Private key passphrase" />
+                                        <PasswordBox x:Name="SshKeyPassphraseBox" />
                                     </StackPanel>
                                 </GroupBox>
 

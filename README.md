@@ -11,7 +11,7 @@ I personally wanted to make this software for 2 reasons:
 - I miss having Sequel Ace because I am on windows now.
 - I wanted an excuse to see how well (or bad) would Codex work while making an actual useful software instead of the classic to-do app.
 
-If you want to improve this codebase, feel free to open a PR. If you experience issues, feel free to open an issue, but beware that I might not fix it, given my lack of experience in C# and the fact that this project to me is more like a "handy bash script made for my qorkflow" rather than "a product useful for the community".
+If you want to improve this codebase, feel free to open a PR. If you experience issues, feel free to open an issue, but beware that I might not fix it, given my lack of experience in C# and the fact that this project to me is more like a "handy bash script made for my workflow" rather than "a product useful for the community".
 
 Licensing is 0BSD because:
 
@@ -30,7 +30,6 @@ Rust remains viable for a custom-rendered UI, especially with egui or Slint, but
 - Windows named pipe connection.
 - SSH tunnel connection using local port forwarding.
 - Configurable MySQL TLS mode.
-- Optional SSH host key fingerprint pinning.
 - Saved reusable connection profiles.
 - Multiple active connections in separate tabs.
 - Double-click saved connection profiles to connect.
@@ -53,8 +52,8 @@ Rust remains viable for a custom-rendered UI, especially with egui or Slint, but
 - `Services/DatabaseMetadataService.cs`: schemas, tables, columns, indexes, and foreign keys.
 - `Services/TableDataService.cs`: table loading and cell update execution.
 - `Services/DatabaseConnectionStringFactory.cs`: connection-string construction.
-- `Services/SshTunnel.cs`: SSH tunnel setup and optional host-key fingerprint validation.
-- `Security/`: SQL identifier validation, query-log sanitization, and SSH fingerprint comparison.
+- `Services/SshTunnel.cs`: SSH tunnel setup.
+- `Security/`: SQL identifier validation and query-log sanitization.
 - `Views/`: WPF screens plus view-specific rendering helpers.
 
 ## Security Notes
@@ -66,7 +65,6 @@ Rust remains viable for a custom-rendered UI, especially with egui or Slint, but
 - Saved profiles persist database and SSH passwords only when their `Save password` flags are enabled; those passwords are protected with Windows DPAPI for the current Windows user.
 - Saved profiles do not persist SSH key passphrases.
 - Direct database connections default to full certificate verification. Lower TLS modes remain available for local/dev environments.
-- For SSH tunnels, set the expected host key fingerprint to pin the remote host key.
 - Least privilege is still an operational requirement: use DB accounts scoped to the target schema and required operations only.
 
 ## Build

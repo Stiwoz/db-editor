@@ -22,9 +22,6 @@ internal sealed class StoredConnectionProfile
     public bool SaveSshPassword { get; set; }
     public string ProtectedSshPassword { get; set; } = "";
     public string SshPrivateKeyPath { get; set; } = "";
-    public string SshHostKeyFingerprint { get; set; } = "";
-    public string SshDatabaseHost { get; set; } = "127.0.0.1";
-    public uint SshDatabasePort { get; set; } = 3306;
 
     public static StoredConnectionProfile FromProfile(ConnectionProfile profile)
     {
@@ -46,10 +43,7 @@ internal sealed class StoredConnectionProfile
             SshUserName = profile.SshUserName,
             SaveSshPassword = profile.SaveSshPassword,
             ProtectedSshPassword = profile.SaveSshPassword ? SecretProtector.ProtectString(profile.SshPassword) : "",
-            SshPrivateKeyPath = profile.SshPrivateKeyPath,
-            SshHostKeyFingerprint = profile.SshHostKeyFingerprint,
-            SshDatabaseHost = profile.SshDatabaseHost,
-            SshDatabasePort = profile.SshDatabasePort
+            SshPrivateKeyPath = profile.SshPrivateKeyPath
         };
     }
 
@@ -75,10 +69,7 @@ internal sealed class StoredConnectionProfile
             SshUserName = SshUserName,
             SshPassword = sshPassword,
             SaveSshPassword = SaveSshPassword && !string.IsNullOrEmpty(sshPassword),
-            SshPrivateKeyPath = SshPrivateKeyPath,
-            SshHostKeyFingerprint = SshHostKeyFingerprint,
-            SshDatabaseHost = SshDatabaseHost,
-            SshDatabasePort = SshDatabasePort
+            SshPrivateKeyPath = SshPrivateKeyPath
         };
     }
 }

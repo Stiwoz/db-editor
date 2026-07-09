@@ -17,6 +17,7 @@ public sealed class DarkThemeTests
         var listBoxItemStyle = ExtractStyle(xaml, "<Style TargetType=\"{x:Type ListBoxItem}\">");
         var groupBoxStyle = ExtractStyle(xaml, "<Style TargetType=\"{x:Type GroupBox}\">");
         var pendingEditsGroupBoxStyle = ExtractStyle(xaml, "<Style x:Key=\"PendingEditsGroupBoxStyle\"");
+        var dataGridColumnHeaderStyle = ExtractStyle(xaml, "<Style TargetType=\"{x:Type DataGridColumnHeader}\">");
 
         StringAssert.Contains(xaml, "EditingCellBackgroundBrush");
         StringAssert.Contains(xaml, "Color=\"#E2DFD0\"");
@@ -35,6 +36,11 @@ public sealed class DarkThemeTests
         StringAssert.Contains(groupBoxStyle, "BorderThickness=\"1,1,1,0\"");
         StringAssert.Contains(groupBoxStyle, "BorderThickness=\"1\"");
         StringAssert.Contains(pendingEditsGroupBoxStyle, "BorderThickness=\"0\"");
+        StringAssert.Contains(dataGridColumnHeaderStyle, "x:Name=\"AscendingSortIcon\"");
+        StringAssert.Contains(dataGridColumnHeaderStyle, "x:Name=\"DescendingSortIcon\"");
+        StringAssert.Contains(dataGridColumnHeaderStyle, "Property=\"SortDirection\"");
+        StringAssert.Contains(dataGridColumnHeaderStyle, "Value=\"Ascending\"");
+        StringAssert.Contains(dataGridColumnHeaderStyle, "Value=\"Descending\"");
         StringAssert.Contains(sessionViewXaml, "Style=\"{StaticResource PendingEditsGroupBoxStyle}\"");
         StringAssert.Contains(xaml, "Property=\"VirtualizingPanel.ScrollUnit\" Value=\"Pixel\"");
         StringAssert.Contains(xaml, "Property=\"ScrollViewer.CanContentScroll\" Value=\"True\"");

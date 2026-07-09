@@ -20,9 +20,6 @@ public sealed class ConnectionProfile
     public bool SaveSshPassword { get; set; }
     public string SshPrivateKeyPath { get; set; } = "";
     public string SshPrivateKeyPassphrase { get; set; } = "";
-    public string SshHostKeyFingerprint { get; set; } = "";
-    public string SshDatabaseHost { get; set; } = "127.0.0.1";
-    public uint SshDatabasePort { get; set; } = 3306;
 
     public ConnectionProfile Clone(bool includeSecrets)
     {
@@ -45,10 +42,7 @@ public sealed class ConnectionProfile
             SshPassword = includeSecrets ? SshPassword : "",
             SaveSshPassword = SaveSshPassword,
             SshPrivateKeyPath = SshPrivateKeyPath,
-            SshPrivateKeyPassphrase = includeSecrets ? SshPrivateKeyPassphrase : "",
-            SshHostKeyFingerprint = SshHostKeyFingerprint,
-            SshDatabaseHost = SshDatabaseHost,
-            SshDatabasePort = SshDatabasePort
+            SshPrivateKeyPassphrase = includeSecrets ? SshPrivateKeyPassphrase : ""
         };
     }
 }

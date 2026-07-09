@@ -1,5 +1,4 @@
 using Probe.DbEditor.Models;
-using Probe.DbEditor.Security;
 using Renci.SshNet;
 
 namespace Probe.DbEditor.Services;
@@ -60,22 +59,12 @@ public sealed class SshTunnel : IDisposable
         connectionInfo.Timeout = ConnectionAttemptDefaults.Timeout;
 
         var client = new SshClient(connectionInfo);
-        if (!string.IsNullOrWhiteSpace(profile.SshHostKeyFingerprint))
-        {
-            client.HostKeyReceived += (_, args) =>
-            {
-                args.CanTrust = HostKeyFingerprint.Matches(args, profile.SshHostKeyFingerprint);
-            };
-        }
 
         try
         {
             await client.ConnectAsync(cancellationToken);
 
-            var databaseHost = string.IsNullOrWhiteSpace(profile.SshDatabaseHost)
-                ? "127.0.0.1"
-                : profile.SshDatabaseHost;
-            var databasePort = profile.SshDatabasePort == 0 ? 3306 : profile.SshDatabasePort;
+            var (databaseHost, databasePort) = ResolveRemoteDatabaseEndpoint(profile);
 
             var forwardedPort = new ForwardedPortLocal("127.0.0.1", databaseHost, databasePort);
             client.AddForwardedPort(forwardedPort);
@@ -88,6 +77,15 @@ public sealed class SshTunnel : IDisposable
             client.Dispose();
             throw;
         }
+    }
+
+    internal static (string Host, uint Port) ResolveRemoteDatabaseEndpoint(ConnectionProfile profile)
+    {
+        var databaseHost = string.IsNullOrWhiteSpace(profile.Host)
+            ? "127.0.0.1"
+            : profile.Host;
+        var databasePort = profile.Port == 0 ? 3306 : profile.Port;
+        return (databaseHost, databasePort);
     }
 
     public void Dispose()

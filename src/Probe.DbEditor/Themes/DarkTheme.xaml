@@ -714,11 +714,49 @@
                         BorderBrush="{TemplateBinding BorderBrush}"
                         BorderThickness="0,0,1,1"
                         Padding="{TemplateBinding Padding}">
-                        <ContentPresenter ContentSource="Content"
-                            HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
-                            VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
-                            RecognizesAccessKey="False" />
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <ContentPresenter ContentSource="Content"
+                                HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                RecognizesAccessKey="False" />
+                            <Path x:Name="AscendingSortIcon"
+                                Grid.Column="1"
+                                Width="8"
+                                Height="6"
+                                Margin="6,0,0,0"
+                                HorizontalAlignment="Right"
+                                VerticalAlignment="Center"
+                                Data="M 0 6 L 4 0 L 8 6 Z"
+                                Fill="{StaticResource TextBrush}"
+                                Stretch="Fill"
+                                Visibility="Collapsed" />
+                            <Path x:Name="DescendingSortIcon"
+                                Grid.Column="1"
+                                Width="8"
+                                Height="6"
+                                Margin="6,0,0,0"
+                                HorizontalAlignment="Right"
+                                VerticalAlignment="Center"
+                                Data="M 0 0 L 4 6 L 8 0 Z"
+                                Fill="{StaticResource TextBrush}"
+                                Stretch="Fill"
+                                Visibility="Collapsed" />
+                        </Grid>
                     </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="SortDirection" Value="Ascending">
+                            <Setter TargetName="AscendingSortIcon" Property="Visibility"
+                                Value="Visible" />
+                        </Trigger>
+                        <Trigger Property="SortDirection" Value="Descending">
+                            <Setter TargetName="DescendingSortIcon" Property="Visibility"
+                                Value="Visible" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
@@ -739,7 +777,7 @@
     <Style TargetType="{x:Type DataGridCell}">
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
-        <Setter Property="BorderThickness" Value="0,1,1,0"/>
+        <Setter Property="BorderThickness" Value="0,1,1,0" />
         <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
         <Setter Property="Padding" Value="4,2" />
         <Style.Triggers>

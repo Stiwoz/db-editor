@@ -55,10 +55,7 @@ public sealed class ConnectionProfileTests
             SshPassword = "ssh-secret",
             SaveSshPassword = true,
             SshPrivateKeyPath = "C:\\keys\\id_ed25519",
-            SshPrivateKeyPassphrase = "key-passphrase",
-            SshHostKeyFingerprint = "SHA256:abcdef",
-            SshDatabaseHost = "127.0.0.2",
-            SshDatabasePort = 3308
+            SshPrivateKeyPassphrase = "key-passphrase"
         };
     }
 }

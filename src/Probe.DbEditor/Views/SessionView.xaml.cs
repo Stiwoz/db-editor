@@ -411,7 +411,7 @@ public partial class SessionView : UserControl
     {
         if (summary.LastRows is not null)
         {
-            ShowQueryResults(summary.LastRows);
+            ShowQueryResults(summary.LastRows, summary.LastRowsOrdering);
             QueryStatusText.Text = $"{summary.LastRows.Rows.Count} row(s)";
             return;
         }
@@ -881,17 +881,17 @@ public partial class SessionView : UserControl
         QueryResultGrid.Visibility = Visibility.Collapsed;
     }
 
-    private void ShowQueryResults(DataTable rows)
+    private void ShowQueryResults(DataTable rows, IReadOnlyList<SqlOrderByColumn> ordering)
     {
         QueryResultGrid.ItemsSource = null;
         QueryResultGrid.Columns.Clear();
-        CreateQueryResultColumns(rows);
+        CreateQueryResultColumns(rows, ordering);
         QueryResultGrid.Visibility = Visibility.Visible;
         QueryResultGrid.ItemsSource = rows.DefaultView;
         QueryResultGrid.Items.Refresh();
     }
 
-    private void CreateQueryResultColumns(DataTable rows)
+    private void CreateQueryResultColumns(DataTable rows, IReadOnlyList<SqlOrderByColumn> ordering)
     {
         foreach (DataColumn column in rows.Columns)
         {
@@ -899,6 +899,7 @@ public partial class SessionView : UserControl
             {
                 Header = column.ColumnName,
                 SortMemberPath = column.ColumnName,
+                SortDirection = FindQuerySortDirection(column.ColumnName, ordering),
                 Binding = new Binding($"[{column.ColumnName}]")
                 {
                     Mode = BindingMode.OneWay,
@@ -906,6 +907,15 @@ public partial class SessionView : UserControl
                 }
             });
         }
+    }
+
+    private static ListSortDirection? FindQuerySortDirection(
+        string columnName,
+        IReadOnlyList<SqlOrderByColumn> ordering)
+    {
+        return ordering
+            .FirstOrDefault(order => string.Equals(order.ColumnName, columnName, StringComparison.OrdinalIgnoreCase))
+            ?.Direction;
     }
 
     private IDisposable BeginRunningOperation()
@@ -1354,6 +1364,7 @@ public partial class SessionView : UserControl
     private sealed class QueryExecutionSummary
     {
         public DataTable? LastRows { get; private set; }
+        public IReadOnlyList<SqlOrderByColumn> LastRowsOrdering { get; private set; } = [];
         public int InsertedRows { get; private set; }
         public int ModifiedRows { get; private set; }
         public int DeletedRows { get; private set; }
@@ -1368,6 +1379,7 @@ public partial class SessionView : UserControl
             if (statement.Kind == SqlStatementKind.Select || result.Rows.Columns.Count > 0)
             {
                 LastRows = result.Rows;
+                LastRowsOrdering = SqlOrderByParser.Parse(statement.Text);
                 return;
             }
 
