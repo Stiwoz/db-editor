@@ -8,6 +8,7 @@ using Microsoft.Win32;
 using Probe.DbEditor.Models;
 using Probe.DbEditor.Services;
 using Probe.DbEditor.Themes;
+using Probe.DbEditor.Views.Favorites;
 using Probe.DbEditor.Views;
 
 namespace Probe.DbEditor;
@@ -15,7 +16,9 @@ namespace Probe.DbEditor;
 public partial class MainWindow : Window
 {
     private readonly ConnectionProfileStore _profileStore = new();
+    private readonly ObservableCollection<ConnectionProfileFolder> _folders = [];
     private readonly ObservableCollection<ConnectionProfile> _profiles = [];
+    private readonly ObservableCollection<FavoriteTreeItemViewModel> _favoriteTree = [];
     private readonly List<ProtocolOption> _protocolOptions =
     [
         new("TCP/IP", ConnectionProtocolKind.Tcp),
@@ -30,9 +33,26 @@ public partial class MainWindow : Window
         new("Prefer TLS", DatabaseTlsMode.Preferred),
         new("Disable TLS", DatabaseTlsMode.Disabled)
     ];
+    private readonly List<FavoriteColorOption> _favoriteColorOptions =
+    [
+        FavoriteColorOption.Create(ConnectionFavoriteColor.None),
+        FavoriteColorOption.Create(ConnectionFavoriteColor.Gray),
+        FavoriteColorOption.Create(ConnectionFavoriteColor.Green),
+        FavoriteColorOption.Create(ConnectionFavoriteColor.Purple),
+        FavoriteColorOption.Create(ConnectionFavoriteColor.Blue),
+        FavoriteColorOption.Create(ConnectionFavoriteColor.Yellow),
+        FavoriteColorOption.Create(ConnectionFavoriteColor.Red),
+        FavoriteColorOption.Create(ConnectionFavoriteColor.Orange)
+    ];
 
     private ConnectionProfile? _selectedProfile;
+    private FavoriteTreeItemViewModel? _contextFavoriteItem;
+    private FavoriteTreeItemViewModel? _favoriteDragCandidate;
+    private FavoriteTreeItemViewModel? _renamingFavoriteItem;
+    private Point _favoriteDragStart;
+    private string _renameOriginalName = "";
     private bool _connectionOperationInProgress;
+    private bool _loadingProfile;
 
     public MainWindow()
     {
@@ -48,40 +68,246 @@ public partial class MainWindow : Window
         TlsModeCombo.ItemsSource = _tlsOptions;
         TlsModeCombo.DisplayMemberPath = nameof(TlsOption.Label);
         TlsModeCombo.SelectedIndex = 0;
+        ProfileColorList.ItemsSource = _favoriteColorOptions;
+        ProfileColorList.SelectedItem = _favoriteColorOptions[0];
 
-        SavedProfilesList.ItemsSource = _profiles;
-        foreach (var profile in await _profileStore.LoadAsync())
+        SavedProfilesTree.ItemsSource = _favoriteTree;
+        var favorites = await _profileStore.LoadFavoritesAsync();
+        foreach (var folder in favorites.Folders)
+        {
+            _folders.Add(folder);
+        }
+
+        foreach (var profile in favorites.Profiles)
         {
             _profiles.Add(profile);
         }
 
+        NormalizeProfileFolders();
+        RefreshFavoriteTree();
         LoadProfile(new ConnectionProfile());
     }
 
     private void NewProfile_Click(object sender, RoutedEventArgs e)
     {
-        SavedProfilesList.SelectedItem = null;
-        LoadProfile(new ConnectionProfile());
+        LoadProfile(new ConnectionProfile { FolderId = CurrentFavoriteFolderId() });
+    }
+
+    private async void NewFolder_Click(object sender, RoutedEventArgs e)
+    {
+        await AddFolderAsync();
     }
 
     private async void DeleteProfile_Click(object sender, RoutedEventArgs e)
     {
-        if (SavedProfilesList.SelectedItem is not ConnectionProfile profile)
+        if (SavedProfilesTree.SelectedItem is not FavoriteTreeItemViewModel item)
         {
             return;
         }
 
-        _profiles.Remove(profile);
-        await _profileStore.SaveAsync(_profiles);
-        SavedProfilesList.SelectedItem = null;
-        LoadProfile(new ConnectionProfile());
+        if (item.Profile is not null)
+        {
+            await DeleteProfileAsync(item.Profile);
+        }
+        else if (item.Folder is not null)
+        {
+            await DeleteFolderAsync(item.Folder);
+        }
     }
 
-    private void SavedProfilesList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    private void SavedProfilesTree_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
     {
-        if (SavedProfilesList.SelectedItem is ConnectionProfile profile)
+        if (e.NewValue is FavoriteTreeItemViewModel { Profile: not null } item)
         {
-            LoadProfile(profile);
+            LoadProfile(item.Profile);
+        }
+    }
+
+    private void ProfileColorList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_loadingProfile || _selectedProfile is null)
+        {
+            return;
+        }
+
+        _selectedProfile.Color = SelectedFavoriteColor();
+    }
+
+    private void SavedProfilesTree_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        var treeItem = FindTreeViewItem(e.OriginalSource);
+        _contextFavoriteItem = treeItem?.DataContext as FavoriteTreeItemViewModel;
+        if (treeItem is not null)
+        {
+            treeItem.IsSelected = true;
+            e.Handled = true;
+        }
+    }
+
+    private void SavedProfilesTree_ContextMenuOpening(object sender, ContextMenuEventArgs e)
+    {
+        _contextFavoriteItem = (
+            FindTreeViewItem(e.OriginalSource) ??
+            FindTreeViewItem(Mouse.DirectlyOver))?.DataContext as FavoriteTreeItemViewModel;
+
+        FavoriteContextColorMenu.IsEnabled = _contextFavoriteItem is not null;
+        FavoriteContextRenameMenuItem.IsEnabled = _contextFavoriteItem is not null;
+        FavoriteContextDeleteProfileMenuItem.IsEnabled = _contextFavoriteItem?.Profile is not null;
+        FavoriteContextDeleteFolderMenuItem.IsEnabled = _contextFavoriteItem?.Folder is not null;
+
+        foreach (var colorMenuItem in FavoriteContextColorMenu.Items.OfType<MenuItem>())
+        {
+            colorMenuItem.IsCheckable = true;
+            colorMenuItem.IsChecked = ParseFavoriteColor(colorMenuItem.Tag) == _contextFavoriteItem?.Color;
+        }
+    }
+
+    private void FavoriteContextNewConnection_Click(object sender, RoutedEventArgs e)
+    {
+        LoadProfile(new ConnectionProfile { FolderId = ContextFavoriteFolderId() });
+    }
+
+    private async void FavoriteContextNewFolder_Click(object sender, RoutedEventArgs e)
+    {
+        await AddFolderAsync();
+    }
+
+    private async void FavoriteContextDeleteProfile_Click(object sender, RoutedEventArgs e)
+    {
+        if (_contextFavoriteItem?.Profile is not null)
+        {
+            await DeleteProfileAsync(_contextFavoriteItem.Profile);
+        }
+    }
+
+    private async void FavoriteContextDeleteFolder_Click(object sender, RoutedEventArgs e)
+    {
+        if (_contextFavoriteItem?.Folder is not null)
+        {
+            await DeleteFolderAsync(_contextFavoriteItem.Folder);
+        }
+    }
+
+    private void FavoriteContextRename_Click(object sender, RoutedEventArgs e)
+    {
+        if (_contextFavoriteItem is not null)
+        {
+            BeginFavoriteRename(_contextFavoriteItem);
+        }
+    }
+
+    private async void FavoriteContextColor_Click(object sender, RoutedEventArgs e)
+    {
+        if (_contextFavoriteItem is null || sender is not MenuItem menuItem)
+        {
+            return;
+        }
+
+        var color = ParseFavoriteColor(menuItem.Tag);
+        _contextFavoriteItem.Color = color;
+        if (_contextFavoriteItem.Profile is not null &&
+            _selectedProfile?.Id == _contextFavoriteItem.Profile.Id)
+        {
+            _selectedProfile.Color = color;
+            ProfileColorList.SelectedItem = FavoriteColorOptionFor(color);
+        }
+
+        var selectedId = _contextFavoriteItem.Id;
+        var selectedKind = _contextFavoriteItem.Kind;
+        await SaveFavoritesAsync();
+        RefreshFavoriteTree(selectedId, selectedKind);
+    }
+
+    private void SavedProfilesTree_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        _favoriteDragStart = e.GetPosition(SavedProfilesTree);
+        _favoriteDragCandidate = FindTreeViewItem(e.OriginalSource)?.DataContext as FavoriteTreeItemViewModel;
+    }
+
+    private void SavedProfilesTree_PreviewMouseMove(object sender, MouseEventArgs e)
+    {
+        if (e.LeftButton != MouseButtonState.Pressed ||
+            _favoriteDragCandidate?.Profile is null)
+        {
+            return;
+        }
+
+        var currentPosition = e.GetPosition(SavedProfilesTree);
+        if (Math.Abs(currentPosition.X - _favoriteDragStart.X) < SystemParameters.MinimumHorizontalDragDistance &&
+            Math.Abs(currentPosition.Y - _favoriteDragStart.Y) < SystemParameters.MinimumVerticalDragDistance)
+        {
+            return;
+        }
+
+        var data = new DataObject(typeof(ConnectionProfile), _favoriteDragCandidate.Profile);
+        DragDrop.DoDragDrop(SavedProfilesTree, data, DragDropEffects.Move);
+        _favoriteDragCandidate = null;
+    }
+
+    private void SavedProfilesTree_DragOver(object sender, DragEventArgs e)
+    {
+        e.Effects = ResolveDroppedProfile(e, out var profile, out var targetFolderId) &&
+            !string.Equals(profile.FolderId, targetFolderId, StringComparison.Ordinal)
+            ? DragDropEffects.Move
+            : DragDropEffects.None;
+        e.Handled = true;
+    }
+
+    private async void SavedProfilesTree_Drop(object sender, DragEventArgs e)
+    {
+        if (!ResolveDroppedProfile(e, out var profile, out var targetFolderId) ||
+            string.Equals(profile.FolderId, targetFolderId, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        profile.FolderId = targetFolderId;
+        if (_selectedProfile?.Id == profile.Id)
+        {
+            _selectedProfile.FolderId = targetFolderId;
+        }
+
+        await SaveFavoritesAsync();
+        RefreshFavoriteTree(profile.Id, FavoriteTreeItemKind.Profile);
+        e.Handled = true;
+    }
+
+    private async void FavoriteRenameTextBox_LostFocus(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: FavoriteTreeItemViewModel item })
+        {
+            await FinishFavoriteRenameAsync(item, commit: true);
+        }
+    }
+
+    private async void FavoriteRenameTextBox_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (sender is not FrameworkElement { DataContext: FavoriteTreeItemViewModel item })
+        {
+            return;
+        }
+
+        if (e.Key == Key.Enter)
+        {
+            await FinishFavoriteRenameAsync(item, commit: true);
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Escape)
+        {
+            await FinishFavoriteRenameAsync(item, commit: false);
+            e.Handled = true;
+        }
+    }
+
+    private void FavoriteRenameTextBox_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        if (e.NewValue is true && sender is TextBox textBox)
+        {
+            textBox.Dispatcher.BeginInvoke(() =>
+            {
+                textBox.Focus();
+                textBox.SelectAll();
+            });
         }
     }
 
@@ -113,15 +339,15 @@ public partial class MainWindow : Window
             if (existing is null)
             {
                 _profiles.Add(profile);
-                SavedProfilesList.SelectedItem = profile;
+                RefreshFavoriteTree(profile.Id, FavoriteTreeItemKind.Profile);
             }
             else
             {
                 CopyProfile(profile, existing);
-                SavedProfilesList.Items.Refresh();
+                RefreshFavoriteTree(existing.Id, FavoriteTreeItemKind.Profile);
             }
 
-            await _profileStore.SaveAsync(_profiles);
+            await SaveFavoritesAsync();
             var savedSecrets = new List<string>();
             if (profile.SavePassword)
             {
@@ -183,9 +409,9 @@ public partial class MainWindow : Window
         }
     }
 
-    private async void SavedProfilesList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+    private async void SavedProfilesTree_MouseDoubleClick(object sender, MouseButtonEventArgs e)
     {
-        if (SavedProfilesList.SelectedItem is not null)
+        if (SavedProfilesTree.SelectedItem is FavoriteTreeItemViewModel { Profile: not null })
         {
             await ConnectCurrentProfileAsync();
         }
@@ -332,32 +558,356 @@ public partial class MainWindow : Window
         ConnectionsTab.Items.Remove(tab);
     }
 
+    private void RefreshFavoriteTree(
+        string? selectedId = null,
+        FavoriteTreeItemKind? selectedKind = null)
+    {
+        _favoriteTree.Clear();
+
+        var foldersById = _folders.ToDictionary(folder => folder.Id, StringComparer.Ordinal);
+        foreach (var folder in _folders.OrderBy(folder => folder.Name, StringComparer.CurrentCultureIgnoreCase))
+        {
+            var folderItem = FavoriteTreeItemViewModel.ForFolder(folder);
+            foreach (var profile in _profiles
+                .Where(profile => string.Equals(profile.FolderId, folder.Id, StringComparison.Ordinal))
+                .OrderBy(profile => profile.Name, StringComparer.CurrentCultureIgnoreCase))
+            {
+                folderItem.Children.Add(FavoriteTreeItemViewModel.ForProfile(profile, folder.Color));
+            }
+
+            _favoriteTree.Add(folderItem);
+        }
+
+        foreach (var profile in _profiles
+            .Where(profile => string.IsNullOrWhiteSpace(profile.FolderId) || !foldersById.ContainsKey(profile.FolderId))
+            .OrderBy(profile => profile.Name, StringComparer.CurrentCultureIgnoreCase))
+        {
+            profile.FolderId = "";
+            _favoriteTree.Add(FavoriteTreeItemViewModel.ForProfile(profile, ConnectionFavoriteColor.None));
+        }
+
+        if (!string.IsNullOrWhiteSpace(selectedId) && selectedKind is not null)
+        {
+            Dispatcher.BeginInvoke(() => SelectFavoriteTreeItem(selectedId, selectedKind.Value));
+        }
+    }
+
+    private void NormalizeProfileFolders()
+    {
+        var folderIds = _folders.Select(folder => folder.Id).ToHashSet(StringComparer.Ordinal);
+        foreach (var profile in _profiles.Where(profile => !string.IsNullOrWhiteSpace(profile.FolderId) &&
+                                                           !folderIds.Contains(profile.FolderId)))
+        {
+            profile.FolderId = "";
+        }
+    }
+
+    private async Task AddFolderAsync()
+    {
+        var folder = new ConnectionProfileFolder { Name = UniqueFolderName() };
+        _folders.Add(folder);
+        await SaveFavoritesAsync();
+        RefreshFavoriteTree(folder.Id, FavoriteTreeItemKind.Folder);
+        _ = Dispatcher.BeginInvoke(() =>
+        {
+            var item = FindFavoriteTreeItem(folder.Id, FavoriteTreeItemKind.Folder);
+            if (item is not null)
+            {
+                BeginFavoriteRename(item);
+            }
+        });
+    }
+
+    private async Task DeleteProfileAsync(ConnectionProfile profile)
+    {
+        _profiles.Remove(profile);
+        await SaveFavoritesAsync();
+        RefreshFavoriteTree();
+        if (_selectedProfile?.Id == profile.Id)
+        {
+            LoadProfile(new ConnectionProfile());
+        }
+    }
+
+    private async Task DeleteFolderAsync(ConnectionProfileFolder folder)
+    {
+        _folders.Remove(folder);
+        var deletedProfileIds = _profiles
+            .Where(profile => string.Equals(profile.FolderId, folder.Id, StringComparison.Ordinal))
+            .Select(profile => profile.Id)
+            .ToHashSet(StringComparer.Ordinal);
+        foreach (var profile in _profiles.Where(profile => deletedProfileIds.Contains(profile.Id)).ToList())
+        {
+            _profiles.Remove(profile);
+        }
+
+        await SaveFavoritesAsync();
+        RefreshFavoriteTree();
+        if (_selectedProfile is not null && deletedProfileIds.Contains(_selectedProfile.Id))
+        {
+            LoadProfile(new ConnectionProfile());
+        }
+    }
+
+    private void BeginFavoriteRename(FavoriteTreeItemViewModel item)
+    {
+        if (_renamingFavoriteItem is not null)
+        {
+            _renamingFavoriteItem.IsEditingName = false;
+        }
+
+        _renamingFavoriteItem = item;
+        _renameOriginalName = item.Name;
+        item.IsEditingName = true;
+    }
+
+    private async Task FinishFavoriteRenameAsync(FavoriteTreeItemViewModel item, bool commit)
+    {
+        if (!ReferenceEquals(_renamingFavoriteItem, item))
+        {
+            return;
+        }
+
+        if (!commit)
+        {
+            item.Name = _renameOriginalName;
+        }
+        else
+        {
+            item.Name = string.IsNullOrWhiteSpace(item.Name)
+                ? item.IsFolder ? "New folder" : "New connection"
+                : item.Name.Trim();
+            await SaveFavoritesAsync();
+            if (item.Profile is not null && _selectedProfile?.Id == item.Profile.Id)
+            {
+                _selectedProfile.Name = item.Name;
+                ProfileNameTextBox.Text = item.Name;
+            }
+        }
+
+        item.IsEditingName = false;
+        _renamingFavoriteItem = null;
+        _renameOriginalName = "";
+        if (commit)
+        {
+            RefreshFavoriteTree(item.Id, item.Kind);
+        }
+    }
+
+    private bool ResolveDroppedProfile(
+        DragEventArgs e,
+        out ConnectionProfile profile,
+        out string targetFolderId)
+    {
+        profile = null!;
+        targetFolderId = "";
+        if (!e.Data.GetDataPresent(typeof(ConnectionProfile)) ||
+            e.Data.GetData(typeof(ConnectionProfile)) is not ConnectionProfile droppedProfile)
+        {
+            return false;
+        }
+
+        profile = droppedProfile;
+        var target = FindTreeViewItem(e.OriginalSource)?.DataContext as FavoriteTreeItemViewModel;
+        targetFolderId = target switch
+        {
+            { Folder: not null } => target.Folder.Id,
+            { Profile: not null } => target.Profile.FolderId,
+            _ => ""
+        };
+        return true;
+    }
+
+    private string CurrentFavoriteFolderId()
+    {
+        return SavedProfilesTree.SelectedItem is FavoriteTreeItemViewModel item
+            ? FolderIdForFavoriteContext(item)
+            : "";
+    }
+
+    private string ContextFavoriteFolderId()
+    {
+        return _contextFavoriteItem is null ? "" : FolderIdForFavoriteContext(_contextFavoriteItem);
+    }
+
+    private static string FolderIdForFavoriteContext(FavoriteTreeItemViewModel item)
+    {
+        return item switch
+        {
+            { Folder: not null } => item.Folder.Id,
+            { Profile: not null } => item.Profile.FolderId,
+            _ => ""
+        };
+    }
+
+    private static TreeViewItem? FindTreeViewItem(object? originalSource)
+    {
+        var current = originalSource as DependencyObject;
+        while (current is not null)
+        {
+            if (current is TreeViewItem item)
+            {
+                return item;
+            }
+
+            current = current is Visual or System.Windows.Media.Media3D.Visual3D
+                ? VisualTreeHelper.GetParent(current)
+                : LogicalTreeHelper.GetParent(current);
+        }
+
+        return null;
+    }
+
+    private FavoriteTreeItemViewModel? FindFavoriteTreeItem(string id, FavoriteTreeItemKind kind)
+    {
+        foreach (var item in _favoriteTree)
+        {
+            var match = FindFavoriteTreeItem(item, id, kind);
+            if (match is not null)
+            {
+                return match;
+            }
+        }
+
+        return null;
+    }
+
+    private static FavoriteTreeItemViewModel? FindFavoriteTreeItem(
+        FavoriteTreeItemViewModel item,
+        string id,
+        FavoriteTreeItemKind kind)
+    {
+        if (item.Kind == kind && string.Equals(item.Id, id, StringComparison.Ordinal))
+        {
+            return item;
+        }
+
+        foreach (var child in item.Children)
+        {
+            var match = FindFavoriteTreeItem(child, id, kind);
+            if (match is not null)
+            {
+                return match;
+            }
+        }
+
+        return null;
+    }
+
+    private void SelectFavoriteTreeItem(string id, FavoriteTreeItemKind kind)
+    {
+        SavedProfilesTree.UpdateLayout();
+        SelectFavoriteTreeItem(SavedProfilesTree, id, kind);
+    }
+
+    private static bool SelectFavoriteTreeItem(ItemsControl parent, string id, FavoriteTreeItemKind kind)
+    {
+        foreach (var item in parent.Items)
+        {
+            if (parent.ItemContainerGenerator.ContainerFromItem(item) is not TreeViewItem treeItem)
+            {
+                continue;
+            }
+
+            if (item is FavoriteTreeItemViewModel favoriteItem &&
+                favoriteItem.Kind == kind &&
+                string.Equals(favoriteItem.Id, id, StringComparison.Ordinal))
+            {
+                treeItem.IsSelected = true;
+                treeItem.BringIntoView();
+                return true;
+            }
+
+            treeItem.IsExpanded = true;
+            treeItem.UpdateLayout();
+            if (SelectFavoriteTreeItem(treeItem, id, kind))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private string UniqueFolderName()
+    {
+        const string baseName = "New folder";
+        if (_folders.All(folder => !string.Equals(folder.Name, baseName, StringComparison.CurrentCultureIgnoreCase)))
+        {
+            return baseName;
+        }
+
+        for (var index = 2; ; index++)
+        {
+            var candidate = $"{baseName} {index}";
+            if (_folders.All(folder => !string.Equals(folder.Name, candidate, StringComparison.CurrentCultureIgnoreCase)))
+            {
+                return candidate;
+            }
+        }
+    }
+
+    private ConnectionFavoriteColor SelectedFavoriteColor()
+    {
+        return ProfileColorList.SelectedItem is FavoriteColorOption option
+            ? option.Color
+            : ConnectionFavoriteColor.None;
+    }
+
+    private FavoriteColorOption FavoriteColorOptionFor(ConnectionFavoriteColor color)
+    {
+        return _favoriteColorOptions.FirstOrDefault(option => option.Color == color) ?? _favoriteColorOptions[0];
+    }
+
+    private static ConnectionFavoriteColor ParseFavoriteColor(object? tag)
+    {
+        return int.TryParse(Convert.ToString(tag), out var value) &&
+            Enum.IsDefined(typeof(ConnectionFavoriteColor), value)
+            ? (ConnectionFavoriteColor)value
+            : ConnectionFavoriteColor.None;
+    }
+
+    private Task SaveFavoritesAsync()
+    {
+        return _profileStore.SaveFavoritesAsync(_profiles, _folders);
+    }
+
     private void LoadProfile(ConnectionProfile profile)
     {
-        _selectedProfile = profile.Clone(includeSecrets: true);
-        ProfileNameTextBox.Text = profile.Name;
-        HostTextBox.Text = profile.Host;
-        PortTextBox.Text = profile.Port.ToString();
-        PipeNameTextBox.Text = profile.PipeName;
-        UserNameTextBox.Text = profile.UserName;
-        PasswordBox.Password = profile.Password;
-        SavePasswordCheckBox.IsChecked = profile.SavePassword;
-        DefaultSchemaTextBox.Text = profile.DefaultSchema;
-        TlsModeCombo.SelectedItem = _tlsOptions.First(option => option.TlsMode == profile.TlsMode);
-        SshHostTextBox.Text = profile.SshHost;
-        SshPortTextBox.Text = profile.SshPort.ToString();
-        SshUserNameTextBox.Text = profile.SshUserName;
-        SshPasswordBox.Password = profile.SshPassword;
-        SaveSshPasswordCheckBox.IsChecked = profile.SaveSshPassword;
-        SshKeyPathTextBox.Text = profile.SshPrivateKeyPath;
-        SshKeyPassphraseBox.Password = profile.SshPrivateKeyPassphrase;
-        ProtocolCombo.SelectedItem = _protocolOptions.First(option => option.Protocol == profile.Protocol);
+        _loadingProfile = true;
+        try
+        {
+            _selectedProfile = profile.Clone(includeSecrets: true);
+            ProfileNameTextBox.Text = profile.Name;
+            ProfileColorList.SelectedItem = FavoriteColorOptionFor(profile.Color);
+            HostTextBox.Text = profile.Host;
+            PortTextBox.Text = profile.Port.ToString();
+            PipeNameTextBox.Text = profile.PipeName;
+            UserNameTextBox.Text = profile.UserName;
+            PasswordBox.Password = profile.Password;
+            SavePasswordCheckBox.IsChecked = profile.SavePassword;
+            DefaultSchemaTextBox.Text = profile.DefaultSchema;
+            TlsModeCombo.SelectedItem = _tlsOptions.First(option => option.TlsMode == profile.TlsMode);
+            SshHostTextBox.Text = profile.SshHost;
+            SshPortTextBox.Text = profile.SshPort.ToString();
+            SshUserNameTextBox.Text = profile.SshUserName;
+            SshPasswordBox.Password = profile.SshPassword;
+            SaveSshPasswordCheckBox.IsChecked = profile.SaveSshPassword;
+            SshKeyPathTextBox.Text = profile.SshPrivateKeyPath;
+            SshKeyPassphraseBox.Password = profile.SshPrivateKeyPassphrase;
+            ProtocolCombo.SelectedItem = _protocolOptions.First(option => option.Protocol == profile.Protocol);
+        }
+        finally
+        {
+            _loadingProfile = false;
+        }
     }
 
     private ConnectionProfile ReadProfileFromForm(bool includeSecrets)
     {
         var profile = _selectedProfile?.Clone(includeSecrets: true) ?? new ConnectionProfile();
         profile.Name = string.IsNullOrWhiteSpace(ProfileNameTextBox.Text) ? "New connection" : ProfileNameTextBox.Text.Trim();
+        profile.Color = SelectedFavoriteColor();
         profile.Protocol = SelectedProtocol();
         profile.Host = HostTextBox.Text.Trim();
         profile.Port = ParseUInt(PortTextBox.Text, 3306);
@@ -422,6 +972,8 @@ public partial class MainWindow : Window
     private static void CopyProfile(ConnectionProfile source, ConnectionProfile target)
     {
         target.Name = source.Name;
+        target.FolderId = source.FolderId;
+        target.Color = source.Color;
         target.Protocol = source.Protocol;
         target.Host = source.Host;
         target.Port = source.Port;
@@ -450,6 +1002,27 @@ public partial class MainWindow : Window
 
     private sealed record TlsOption(string Label, DatabaseTlsMode TlsMode)
     {
+        public override string ToString()
+        {
+            return Label;
+        }
+    }
+
+    private sealed record FavoriteColorOption(
+        ConnectionFavoriteColor Color,
+        string Label,
+        Brush SwatchBrush,
+        Brush BorderBrush)
+    {
+        public static FavoriteColorOption Create(ConnectionFavoriteColor color)
+        {
+            return new FavoriteColorOption(
+                color,
+                FavoriteColorPalette.LabelFor(color),
+                FavoriteColorPalette.CreateSwatchBrush(color),
+                color == ConnectionFavoriteColor.None ? Brushes.Gray : Brushes.Transparent);
+        }
+
         public override string ToString()
         {
             return Label;

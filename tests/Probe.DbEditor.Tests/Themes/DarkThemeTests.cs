@@ -15,6 +15,9 @@ public sealed class DarkThemeTests
         var comboBoxStyle = ExtractStyle(xaml, "<Style x:Key=\"BaseComboBoxStyle\" TargetType=\"{x:Type ComboBox}\">");
         var comboBoxItemStyle = ExtractStyle(xaml, "<Style TargetType=\"{x:Type ComboBoxItem}\">");
         var listBoxItemStyle = ExtractStyle(xaml, "<Style TargetType=\"{x:Type ListBoxItem}\">");
+        var separatorStyle = ExtractStyle(xaml, "<Style x:Key=\"SeparatorStyle\" TargetType=\"Separator\">");
+        var contextMenuStyle = ExtractStyle(xaml, "<Style TargetType=\"{x:Type ContextMenu}\">");
+        var menuItemStyle = ExtractStyle(xaml, "<Style TargetType=\"{x:Type MenuItem}\">");
         var groupBoxStyle = ExtractStyle(xaml, "<Style TargetType=\"{x:Type GroupBox}\">");
         var pendingEditsGroupBoxStyle = ExtractStyle(xaml, "<Style x:Key=\"PendingEditsGroupBoxStyle\"");
         var dataGridColumnHeaderStyle = ExtractStyle(xaml, "<Style TargetType=\"{x:Type DataGridColumnHeader}\">");
@@ -33,6 +36,15 @@ public sealed class DarkThemeTests
         StringAssert.Contains(listBoxItemStyle, "ControlTemplate TargetType=\"{x:Type ListBoxItem}\"");
         StringAssert.Contains(listBoxItemStyle, "TargetName=\"ItemBorder\" Property=\"Background\"");
         StringAssert.Contains(listBoxItemStyle, "Value=\"{StaticResource AccentBrush}\"");
+        StringAssert.Contains(separatorStyle, "Margin=\"28,5,8,5\"");
+        StringAssert.Contains(contextMenuStyle, "ControlTemplate TargetType=\"{x:Type ContextMenu}\"");
+        StringAssert.Contains(contextMenuStyle, "Background=\"{TemplateBinding Background}\"");
+        StringAssert.Contains(contextMenuStyle, "BorderBrush=\"{TemplateBinding BorderBrush}\"");
+        StringAssert.Contains(menuItemStyle, "ControlTemplate TargetType=\"{x:Type MenuItem}\"");
+        StringAssert.Contains(menuItemStyle, "x:Name=\"PART_Popup\"");
+        StringAssert.Contains(menuItemStyle, "IsSubmenuOpen");
+        StringAssert.Contains(menuItemStyle, "x:Name=\"SubmenuArrow\"");
+        StringAssert.Contains(menuItemStyle, "Value=\"{StaticResource SelectionSoftBrush}\"");
         StringAssert.Contains(groupBoxStyle, "BorderThickness=\"1,1,1,0\"");
         StringAssert.Contains(groupBoxStyle, "BorderThickness=\"1\"");
         StringAssert.Contains(pendingEditsGroupBoxStyle, "BorderThickness=\"0\"");

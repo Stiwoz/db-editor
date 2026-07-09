@@ -25,6 +25,27 @@ public sealed class MainWindowMiddleClickTests
     }
 
     [TestMethod]
+    public async Task MainWindow_SavedConnectionsUseFolderTreeWithContextMenuDragDropRenameAndColors()
+    {
+        var mainWindowXaml = await ReadFixtureAsync("MainWindow.xaml");
+        var mainWindowCode = await ReadFixtureAsync("MainWindow.xaml.cs");
+
+        StringAssert.Contains(mainWindowXaml, "TreeView x:Name=\"SavedProfilesTree\"");
+        StringAssert.Contains(mainWindowXaml, "HierarchicalDataTemplate");
+        StringAssert.Contains(mainWindowXaml, "ProfileColorList");
+        StringAssert.Contains(mainWindowXaml, "FavoriteContextColorMenu");
+        Assert.IsTrue(
+            mainWindowXaml.IndexOf("FavoriteContextColorMenu", StringComparison.Ordinal) <
+            mainWindowXaml.IndexOf("FavoriteContextNewConnection_Click", StringComparison.Ordinal));
+        StringAssert.Contains(mainWindowCode, "LoadFavoritesAsync()");
+        StringAssert.Contains(mainWindowCode, "SaveFavoritesAsync()");
+        StringAssert.Contains(mainWindowCode, "DragDrop.DoDragDrop");
+        StringAssert.Contains(mainWindowCode, "ResolveDroppedProfile");
+        StringAssert.Contains(mainWindowCode, "FinishFavoriteRenameAsync");
+        StringAssert.Contains(mainWindowCode, "FavoriteColorPalette.CreateSwatchBrush");
+    }
+
+    [TestMethod]
     public async Task MiddleClickScrollBehavior_StopsWhenMiddleButtonIsReleased()
     {
         var source = await ReadFixtureAsync("MiddleClickScrollBehavior.cs");

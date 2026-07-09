@@ -14,6 +14,8 @@ public sealed class ConnectionProfileTests
 
         Assert.AreEqual(profile.Id, clone.Id);
         Assert.AreEqual(profile.Name, clone.Name);
+        Assert.AreEqual(profile.FolderId, clone.FolderId);
+        Assert.AreEqual(profile.Color, clone.Color);
         Assert.AreEqual(profile.Protocol, clone.Protocol);
         Assert.AreEqual(profile.Host, clone.Host);
         Assert.AreEqual(profile.SshHost, clone.SshHost);
@@ -40,6 +42,8 @@ public sealed class ConnectionProfileTests
         {
             Id = "profile-id",
             Name = "Production",
+            FolderId = "folder-id",
+            Color = ConnectionFavoriteColor.Green,
             Protocol = ConnectionProtocolKind.SshTunnel,
             Host = "db.example.test",
             Port = 3307,

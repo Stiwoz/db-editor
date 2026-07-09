@@ -3,6 +3,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:behaviors="clr-namespace:Probe.DbEditor.Behaviors"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:favorites="clr-namespace:Probe.DbEditor.Views.Favorites"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d"
     behaviors:MiddleClickScrollBehavior.IsEnabled="True"
@@ -48,12 +49,150 @@
                         <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal"
                             Margin="0,12,0,0">
                             <Button Content="New" Click="NewProfile_Click" />
+                            <Button Content="Folder" Click="NewFolder_Click" />
                             <Button Content="Delete" Click="DeleteProfile_Click" />
                         </StackPanel>
-                        <ListBox x:Name="SavedProfilesList"
-                            DisplayMemberPath="Name"
-                            MouseDoubleClick="SavedProfilesList_MouseDoubleClick"
-                            SelectionChanged="SavedProfilesList_SelectionChanged" />
+                        <TreeView x:Name="SavedProfilesTree"
+                            AllowDrop="True"
+                            PreviewMouseLeftButtonDown="SavedProfilesTree_PreviewMouseLeftButtonDown"
+                            PreviewMouseMove="SavedProfilesTree_PreviewMouseMove"
+                            PreviewMouseRightButtonDown="SavedProfilesTree_PreviewMouseRightButtonDown"
+                            DragOver="SavedProfilesTree_DragOver"
+                            Drop="SavedProfilesTree_Drop"
+                            MouseDoubleClick="SavedProfilesTree_MouseDoubleClick"
+                            SelectedItemChanged="SavedProfilesTree_SelectedItemChanged"
+                            ContextMenuOpening="SavedProfilesTree_ContextMenuOpening">
+                            <TreeView.ContextMenu>
+                                <ContextMenu x:Name="SavedProfilesContextMenu">
+                                    <MenuItem x:Name="FavoriteContextColorMenu" Header="Color">
+                                        <MenuItem Header="No Color" Tag="0"
+                                            Click="FavoriteContextColor_Click">
+                                            <MenuItem.Icon>
+                                                <Border Width="12"
+                                                    Height="12"
+                                                    CornerRadius="6"
+                                                    Background="Transparent"
+                                                    BorderBrush="#7F7F7F"
+                                                    BorderThickness="1.5" />
+                                            </MenuItem.Icon>
+                                        </MenuItem>
+                                        <MenuItem Header="Gray" Tag="1"
+                                            Click="FavoriteContextColor_Click">
+                                            <MenuItem.Icon>
+                                                <Border Width="12" Height="12" CornerRadius="6"
+                                                    Background="#7F7F7F" />
+                                            </MenuItem.Icon>
+                                        </MenuItem>
+                                        <MenuItem Header="Green" Tag="2"
+                                            Click="FavoriteContextColor_Click">
+                                            <MenuItem.Icon>
+                                                <Border Width="12" Height="12" CornerRadius="6"
+                                                    Background="#34C759" />
+                                            </MenuItem.Icon>
+                                        </MenuItem>
+                                        <MenuItem Header="Purple" Tag="3"
+                                            Click="FavoriteContextColor_Click">
+                                            <MenuItem.Icon>
+                                                <Border Width="12" Height="12" CornerRadius="6"
+                                                    Background="#AF52DE" />
+                                            </MenuItem.Icon>
+                                        </MenuItem>
+                                        <MenuItem Header="Blue" Tag="4"
+                                            Click="FavoriteContextColor_Click">
+                                            <MenuItem.Icon>
+                                                <Border Width="12" Height="12" CornerRadius="6"
+                                                    Background="#007AFF" />
+                                            </MenuItem.Icon>
+                                        </MenuItem>
+                                        <MenuItem Header="Yellow" Tag="5"
+                                            Click="FavoriteContextColor_Click">
+                                            <MenuItem.Icon>
+                                                <Border Width="12" Height="12" CornerRadius="6"
+                                                    Background="#FFCC00" />
+                                            </MenuItem.Icon>
+                                        </MenuItem>
+                                        <MenuItem Header="Red" Tag="6"
+                                            Click="FavoriteContextColor_Click">
+                                            <MenuItem.Icon>
+                                                <Border Width="12" Height="12" CornerRadius="6"
+                                                    Background="#FF3B30" />
+                                            </MenuItem.Icon>
+                                        </MenuItem>
+                                        <MenuItem Header="Orange" Tag="7"
+                                            Click="FavoriteContextColor_Click">
+                                            <MenuItem.Icon>
+                                                <Border Width="12" Height="12" CornerRadius="6"
+                                                    Background="#FF9500" />
+                                            </MenuItem.Icon>
+                                        </MenuItem>
+                                    </MenuItem>
+                                    <Separator />
+                                    <MenuItem Header="New Connection"
+                                        Click="FavoriteContextNewConnection_Click" />
+                                    <MenuItem Header="New Folder"
+                                        Click="FavoriteContextNewFolder_Click" />
+                                    <MenuItem x:Name="FavoriteContextRenameMenuItem"
+                                        Header="Rename"
+                                        Click="FavoriteContextRename_Click" />
+                                    <MenuItem x:Name="FavoriteContextDeleteProfileMenuItem"
+                                        Header="Delete Favorite"
+                                        Click="FavoriteContextDeleteProfile_Click" />
+                                    <MenuItem x:Name="FavoriteContextDeleteFolderMenuItem"
+                                        Header="Delete Folder"
+                                        Click="FavoriteContextDeleteFolder_Click" />
+                                </ContextMenu>
+                            </TreeView.ContextMenu>
+                            <TreeView.Resources>
+                                <HierarchicalDataTemplate DataType="{x:Type favorites:FavoriteTreeItemViewModel}"
+                                    ItemsSource="{Binding Children}">
+                                    <Border Background="{Binding BackgroundBrush}"
+                                        CornerRadius="4"
+                                        Padding="6,3"
+                                        Margin="0,1"
+                                        HorizontalAlignment="Stretch">
+                                        <Grid>
+                                            <TextBlock Text="{Binding Name}"
+                                                VerticalAlignment="Center"
+                                                TextTrimming="CharacterEllipsis">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="{x:Type TextBlock}">
+                                                        <Setter Property="Visibility" Value="Visible" />
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsEditingName}"
+                                                                Value="True">
+                                                                <Setter Property="Visibility"
+                                                                    Value="Collapsed" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+                                            <TextBox Text="{Binding Name, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                Margin="0"
+                                                Padding="4,1"
+                                                MinWidth="0"
+                                                IsVisibleChanged="FavoriteRenameTextBox_IsVisibleChanged"
+                                                KeyDown="FavoriteRenameTextBox_KeyDown"
+                                                LostFocus="FavoriteRenameTextBox_LostFocus">
+                                                <TextBox.Style>
+                                                    <Style TargetType="{x:Type TextBox}"
+                                                        BasedOn="{StaticResource BaseTextBoxStyle}">
+                                                        <Setter Property="Visibility" Value="Collapsed" />
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsEditingName}"
+                                                                Value="True">
+                                                                <Setter Property="Visibility"
+                                                                    Value="Visible" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBox.Style>
+                                            </TextBox>
+                                        </Grid>
+                                    </Border>
+                                </HierarchicalDataTemplate>
+                            </TreeView.Resources>
+                        </TreeView>
                     </DockPanel>
 
                     <Border Grid.Column="2" BorderBrush="{StaticResource BorderBrush}"
@@ -63,6 +202,41 @@
 
                                 <TextBlock Text="Profile name" />
                                 <TextBox x:Name="ProfileNameTextBox" />
+                                <TextBlock Text="Color" />
+                                <ListBox x:Name="ProfileColorList"
+                                    BorderThickness="0"
+                                    Background="Transparent"
+                                    SelectionChanged="ProfileColorList_SelectionChanged"
+                                    Margin="0,3,0,9"
+                                    ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                    ScrollViewer.VerticalScrollBarVisibility="Disabled">
+                                    <ListBox.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <StackPanel Orientation="Horizontal" />
+                                        </ItemsPanelTemplate>
+                                    </ListBox.ItemsPanel>
+                                    <ListBox.ItemContainerStyle>
+                                        <Style TargetType="{x:Type ListBoxItem}">
+                                            <Setter Property="Padding" Value="3" />
+                                            <Setter Property="Margin" Value="0,0,6,0" />
+                                            <Setter Property="Width" Value="26" />
+                                            <Setter Property="Height" Value="26" />
+                                            <Setter Property="HorizontalContentAlignment" Value="Center" />
+                                            <Setter Property="VerticalContentAlignment" Value="Center" />
+                                        </Style>
+                                    </ListBox.ItemContainerStyle>
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Width="16"
+                                                Height="16"
+                                                CornerRadius="8"
+                                                Background="{Binding SwatchBrush}"
+                                                BorderBrush="{Binding BorderBrush}"
+                                                BorderThickness="1.5"
+                                                ToolTip="{Binding Label}" />
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
 
                                 <TextBlock Text="Mode" />
                                 <ComboBox x:Name="ProtocolCombo"

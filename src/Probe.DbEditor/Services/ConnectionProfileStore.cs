@@ -29,17 +29,45 @@ public sealed class ConnectionProfileStore
 
     public async Task<List<ConnectionProfile>> LoadAsync()
     {
+        return (await LoadFavoritesAsync()).Profiles;
+    }
+
+    public async Task<ConnectionFavorites> LoadFavoritesAsync()
+    {
         if (!File.Exists(_filePath))
         {
-            return [];
+            return new ConnectionFavorites();
         }
 
         await using var stream = File.OpenRead(_filePath);
-        var profiles = await JsonSerializer.DeserializeAsync<List<StoredConnectionProfile>>(stream, _jsonOptions);
-        return profiles?.Select(profile => profile.ToProfile()).ToList() ?? [];
+        using var document = await JsonDocument.ParseAsync(stream);
+        var favorites = new ConnectionFavorites();
+        if (document.RootElement.ValueKind == JsonValueKind.Array)
+        {
+            var profiles = document.RootElement.Deserialize<List<StoredConnectionProfile>>(_jsonOptions) ?? [];
+            favorites.Profiles.AddRange(profiles.Select(profile => profile.ToProfile()));
+            return favorites;
+        }
+
+        var storedFavorites = document.RootElement.Deserialize<StoredConnectionFavorites>(_jsonOptions);
+        if (storedFavorites is null)
+        {
+            return favorites;
+        }
+
+        favorites.Folders.AddRange(storedFavorites.Folders.Select(folder => folder.ToFolder()));
+        favorites.Profiles.AddRange(storedFavorites.Profiles.Select(profile => profile.ToProfile()));
+        return favorites;
     }
 
     public async Task SaveAsync(IEnumerable<ConnectionProfile> profiles)
+    {
+        await SaveFavoritesAsync(profiles, []);
+    }
+
+    public async Task SaveFavoritesAsync(
+        IEnumerable<ConnectionProfile> profiles,
+        IEnumerable<ConnectionProfileFolder> folders)
     {
         var directory = Path.GetDirectoryName(_filePath);
         if (!string.IsNullOrWhiteSpace(directory))
@@ -48,7 +76,14 @@ public sealed class ConnectionProfileStore
         }
 
         var persistableProfiles = profiles.Select(StoredConnectionProfile.FromProfile).ToList();
+        var persistableFolders = folders.Select(StoredConnectionProfileFolder.FromFolder).ToList();
+        var favorites = new StoredConnectionFavorites
+        {
+            Folders = persistableFolders,
+            Profiles = persistableProfiles
+        };
+
         await using var stream = File.Create(_filePath);
-        await JsonSerializer.SerializeAsync(stream, persistableProfiles, _jsonOptions);
+        await JsonSerializer.SerializeAsync(stream, favorites, _jsonOptions);
     }
 }
