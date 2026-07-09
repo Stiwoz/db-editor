@@ -9,6 +9,7 @@ namespace Probe.DbEditor.Views.Favorites;
 public sealed class FavoriteTreeItemViewModel : INotifyPropertyChanged
 {
     private bool _isEditingName;
+    private bool _isDropTarget;
 
     private FavoriteTreeItemViewModel(
         FavoriteTreeItemKind kind,
@@ -88,6 +89,21 @@ public sealed class FavoriteTreeItemViewModel : INotifyPropertyChanged
             }
 
             _isEditingName = value;
+            OnPropertyChanged();
+        }
+    }
+
+    public bool IsDropTarget
+    {
+        get => _isDropTarget;
+        set
+        {
+            if (_isDropTarget == value)
+            {
+                return;
+            }
+
+            _isDropTarget = value;
             OnPropertyChanged();
         }
     }

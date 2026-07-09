@@ -32,14 +32,24 @@ public sealed class MainWindowMiddleClickTests
 
         StringAssert.Contains(mainWindowXaml, "TreeView x:Name=\"SavedProfilesTree\"");
         StringAssert.Contains(mainWindowXaml, "HierarchicalDataTemplate");
+        StringAssert.Contains(mainWindowXaml, "Background=\"{Binding BackgroundBrush}\"");
+        StringAssert.Contains(mainWindowXaml, "StrokeDashArray=\"2 2\"");
+        StringAssert.Contains(mainWindowXaml, "FavoriteRootDropPreview");
+        StringAssert.Contains(mainWindowXaml, "FavoriteDragPreviewPopup");
         StringAssert.Contains(mainWindowXaml, "ProfileColorList");
         StringAssert.Contains(mainWindowXaml, "FavoriteContextColorMenu");
+        Assert.IsFalse(mainWindowXaml.Contains("CornerRadius=\"4\"", StringComparison.Ordinal));
         Assert.IsTrue(
             mainWindowXaml.IndexOf("FavoriteContextColorMenu", StringComparison.Ordinal) <
             mainWindowXaml.IndexOf("FavoriteContextNewConnection_Click", StringComparison.Ordinal));
         StringAssert.Contains(mainWindowCode, "LoadFavoritesAsync()");
         StringAssert.Contains(mainWindowCode, "SaveFavoritesAsync()");
         StringAssert.Contains(mainWindowCode, "DragDrop.DoDragDrop");
+        StringAssert.Contains(mainWindowCode, "ClearFavoriteDragCandidate();");
+        StringAssert.Contains(mainWindowCode, "SavedProfilesContextMenu_Closed");
+        StringAssert.Contains(mainWindowCode, "_favoriteDragArmed");
+        StringAssert.Contains(mainWindowCode, "StartFavoriteDragPreview");
+        StringAssert.Contains(mainWindowCode, "SetFavoriteDropTarget");
         StringAssert.Contains(mainWindowCode, "ResolveDroppedProfile");
         StringAssert.Contains(mainWindowCode, "FinishFavoriteRenameAsync");
         StringAssert.Contains(mainWindowCode, "FavoriteColorPalette.CreateSwatchBrush");

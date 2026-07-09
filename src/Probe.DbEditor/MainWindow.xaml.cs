@@ -48,10 +48,13 @@ public partial class MainWindow : Window
     private ConnectionProfile? _selectedProfile;
     private FavoriteTreeItemViewModel? _contextFavoriteItem;
     private FavoriteTreeItemViewModel? _favoriteDragCandidate;
+    private FavoriteTreeItemViewModel? _favoriteDropTarget;
     private FavoriteTreeItemViewModel? _renamingFavoriteItem;
     private Point _favoriteDragStart;
     private string _renameOriginalName = "";
     private bool _connectionOperationInProgress;
+    private bool _favoriteDragArmed;
+    private bool _isFavoriteDragging;
     private bool _loadingProfile;
 
     public MainWindow()
@@ -135,6 +138,7 @@ public partial class MainWindow : Window
 
     private void SavedProfilesTree_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
     {
+        ClearFavoriteDragCandidate();
         var treeItem = FindTreeViewItem(e.OriginalSource);
         _contextFavoriteItem = treeItem?.DataContext as FavoriteTreeItemViewModel;
         if (treeItem is not null)
@@ -146,6 +150,7 @@ public partial class MainWindow : Window
 
     private void SavedProfilesTree_ContextMenuOpening(object sender, ContextMenuEventArgs e)
     {
+        ClearFavoriteDragCandidate();
         _contextFavoriteItem = (
             FindTreeViewItem(e.OriginalSource) ??
             FindTreeViewItem(Mouse.DirectlyOver))?.DataContext as FavoriteTreeItemViewModel;
@@ -160,6 +165,11 @@ public partial class MainWindow : Window
             colorMenuItem.IsCheckable = true;
             colorMenuItem.IsChecked = ParseFavoriteColor(colorMenuItem.Tag) == _contextFavoriteItem?.Color;
         }
+    }
+
+    private void SavedProfilesContextMenu_Closed(object sender, RoutedEventArgs e)
+    {
+        ClearFavoriteDragCandidate();
     }
 
     private void FavoriteContextNewConnection_Click(object sender, RoutedEventArgs e)
@@ -220,13 +230,32 @@ public partial class MainWindow : Window
 
     private void SavedProfilesTree_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
+        ClearFavoriteDragCandidate();
+        if (SavedProfilesContextMenu.IsOpen)
+        {
+            return;
+        }
+
+        var treeItem = FindTreeViewItem(e.OriginalSource);
+        if (treeItem?.DataContext is not FavoriteTreeItemViewModel { Profile: not null } item)
+        {
+            return;
+        }
+
         _favoriteDragStart = e.GetPosition(SavedProfilesTree);
-        _favoriteDragCandidate = FindTreeViewItem(e.OriginalSource)?.DataContext as FavoriteTreeItemViewModel;
+        _favoriteDragCandidate = item;
+        _favoriteDragArmed = true;
+    }
+
+    private void SavedProfilesTree_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        ClearFavoriteDragCandidate();
     }
 
     private void SavedProfilesTree_PreviewMouseMove(object sender, MouseEventArgs e)
     {
-        if (e.LeftButton != MouseButtonState.Pressed ||
+        if (!_favoriteDragArmed ||
+            e.LeftButton != MouseButtonState.Pressed ||
             _favoriteDragCandidate?.Profile is null)
         {
             return;
@@ -240,24 +269,43 @@ public partial class MainWindow : Window
         }
 
         var data = new DataObject(typeof(ConnectionProfile), _favoriteDragCandidate.Profile);
-        DragDrop.DoDragDrop(SavedProfilesTree, data, DragDropEffects.Move);
-        _favoriteDragCandidate = null;
+        try
+        {
+            StartFavoriteDragPreview(_favoriteDragCandidate);
+            DragDrop.DoDragDrop(SavedProfilesTree, data, DragDropEffects.Move);
+        }
+        finally
+        {
+            StopFavoriteDragPreview();
+            ClearFavoriteDropTarget();
+            ClearFavoriteDragCandidate();
+        }
     }
 
     private void SavedProfilesTree_DragOver(object sender, DragEventArgs e)
     {
-        e.Effects = ResolveDroppedProfile(e, out var profile, out var targetFolderId) &&
-            !string.Equals(profile.FolderId, targetFolderId, StringComparison.Ordinal)
-            ? DragDropEffects.Move
-            : DragDropEffects.None;
+        UpdateFavoriteDragPreviewPosition();
+        if (ResolveDroppedProfile(e, out var profile, out var targetFolderId, out var targetItem) &&
+            !string.Equals(profile.FolderId, targetFolderId, StringComparison.Ordinal))
+        {
+            e.Effects = DragDropEffects.Move;
+            SetFavoriteDropTarget(targetItem, targetItem is null && string.IsNullOrEmpty(targetFolderId));
+        }
+        else
+        {
+            e.Effects = DragDropEffects.None;
+            ClearFavoriteDropTarget();
+        }
+
         e.Handled = true;
     }
 
     private async void SavedProfilesTree_Drop(object sender, DragEventArgs e)
     {
-        if (!ResolveDroppedProfile(e, out var profile, out var targetFolderId) ||
+        if (!ResolveDroppedProfile(e, out var profile, out var targetFolderId, out _) ||
             string.Equals(profile.FolderId, targetFolderId, StringComparison.Ordinal))
         {
+            ClearFavoriteDropTarget();
             return;
         }
 
@@ -269,7 +317,37 @@ public partial class MainWindow : Window
 
         await SaveFavoritesAsync();
         RefreshFavoriteTree(profile.Id, FavoriteTreeItemKind.Profile);
+        ClearFavoriteDropTarget();
         e.Handled = true;
+    }
+
+    private void SavedProfilesTree_DragLeave(object sender, DragEventArgs e)
+    {
+        if (!SavedProfilesTree.IsMouseOver)
+        {
+            ClearFavoriteDropTarget();
+        }
+    }
+
+    private void SavedProfilesTree_GiveFeedback(object sender, GiveFeedbackEventArgs e)
+    {
+        if (!_isFavoriteDragging)
+        {
+            return;
+        }
+
+        UpdateFavoriteDragPreviewPosition();
+        Mouse.SetCursor(e.Effects == DragDropEffects.Move ? Cursors.Hand : Cursors.No);
+        e.UseDefaultCursors = false;
+        e.Handled = true;
+    }
+
+    private void SavedProfilesTree_QueryContinueDrag(object sender, QueryContinueDragEventArgs e)
+    {
+        if (e.EscapePressed || e.KeyStates.HasFlag(DragDropKeyStates.LeftMouseButton) == false)
+        {
+            ClearFavoriteDropTarget();
+        }
     }
 
     private async void FavoriteRenameTextBox_LostFocus(object sender, RoutedEventArgs e)
@@ -697,10 +775,12 @@ public partial class MainWindow : Window
     private bool ResolveDroppedProfile(
         DragEventArgs e,
         out ConnectionProfile profile,
-        out string targetFolderId)
+        out string targetFolderId,
+        out FavoriteTreeItemViewModel? targetItem)
     {
         profile = null!;
         targetFolderId = "";
+        targetItem = null;
         if (!e.Data.GetDataPresent(typeof(ConnectionProfile)) ||
             e.Data.GetData(typeof(ConnectionProfile)) is not ConnectionProfile droppedProfile)
         {
@@ -708,14 +788,77 @@ public partial class MainWindow : Window
         }
 
         profile = droppedProfile;
-        var target = FindTreeViewItem(e.OriginalSource)?.DataContext as FavoriteTreeItemViewModel;
-        targetFolderId = target switch
+        targetItem = FindTreeViewItem(e.OriginalSource)?.DataContext as FavoriteTreeItemViewModel;
+        targetFolderId = targetItem switch
         {
-            { Folder: not null } => target.Folder.Id,
-            { Profile: not null } => target.Profile.FolderId,
+            { Folder: not null } => targetItem.Folder.Id,
+            { Profile: not null } => targetItem.Profile.FolderId,
             _ => ""
         };
         return true;
+    }
+
+    private void ClearFavoriteDragCandidate()
+    {
+        _favoriteDragArmed = false;
+        _favoriteDragCandidate = null;
+    }
+
+    private void StartFavoriteDragPreview(FavoriteTreeItemViewModel item)
+    {
+        _isFavoriteDragging = true;
+        FavoriteDragPreviewText.Text = item.Name;
+        FavoriteDragPreviewPopup.IsOpen = true;
+        UpdateFavoriteDragPreviewPosition();
+    }
+
+    private void StopFavoriteDragPreview()
+    {
+        _isFavoriteDragging = false;
+        FavoriteDragPreviewPopup.IsOpen = false;
+        Mouse.OverrideCursor = null;
+    }
+
+    private void UpdateFavoriteDragPreviewPosition()
+    {
+        if (!_isFavoriteDragging)
+        {
+            return;
+        }
+
+        var position = Mouse.GetPosition(SavedProfilesTree);
+        FavoriteDragPreviewPopup.HorizontalOffset = position.X + 14;
+        FavoriteDragPreviewPopup.VerticalOffset = position.Y + 14;
+    }
+
+    private void SetFavoriteDropTarget(FavoriteTreeItemViewModel? targetItem, bool isRootTarget)
+    {
+        if (!ReferenceEquals(_favoriteDropTarget, targetItem))
+        {
+            if (_favoriteDropTarget is not null)
+            {
+                _favoriteDropTarget.IsDropTarget = false;
+            }
+
+            _favoriteDropTarget = targetItem;
+            if (_favoriteDropTarget is not null)
+            {
+                _favoriteDropTarget.IsDropTarget = true;
+            }
+        }
+
+        FavoriteRootDropPreview.Visibility = isRootTarget ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void ClearFavoriteDropTarget()
+    {
+        if (_favoriteDropTarget is not null)
+        {
+            _favoriteDropTarget.IsDropTarget = false;
+            _favoriteDropTarget = null;
+        }
+
+        FavoriteRootDropPreview.Visibility = Visibility.Collapsed;
     }
 
     private string CurrentFavoriteFolderId()
