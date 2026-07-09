@@ -17,6 +17,10 @@ public sealed class SessionViewEditCommitTests
         StringAssert.Contains(cellEditEnding, "await CapturePendingCellEditAsync();");
         StringAssert.Contains(currentCellChanged, "await CapturePendingCellEditAsync();");
         StringAssert.Contains(source, "private async Task CapturePendingCellEditAsync()");
+        StringAssert.Contains(source, "CreateTextEditingContextMenu");
+        StringAssert.Contains(source, "ApplicationCommands.Cut");
+        StringAssert.Contains(source, "ApplicationCommands.Copy");
+        StringAssert.Contains(source, "ApplicationCommands.Paste");
     }
 
     private static string ExtractMethod(string source, string signature)

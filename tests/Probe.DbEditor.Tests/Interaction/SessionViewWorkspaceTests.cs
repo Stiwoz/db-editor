@@ -121,6 +121,20 @@ public sealed class SessionViewWorkspaceTests
         StringAssert.Contains(prepopulate, "_queryTextEditedByUser = false;");
     }
 
+    [TestMethod]
+    public async Task SessionView_BooleanDataGridColumnsUseThemedCheckBoxes()
+    {
+        var xaml = await ReadFixtureAsync("SessionView.xaml");
+        var source = await ReadFixtureAsync("SessionView.xaml.cs");
+
+        StringAssert.Contains(xaml, "ElementStyle=\"{StaticResource DataGridCheckBoxStyle}\"");
+        StringAssert.Contains(xaml, "EditingElementStyle=\"{StaticResource DataGridCheckBoxStyle}\"");
+        StringAssert.Contains(source, "boundColumn is DataGridCheckBoxColumn checkBoxColumn");
+        StringAssert.Contains(source, "TryFindResource(\"DataGridCheckBoxStyle\")");
+        StringAssert.Contains(source, "checkBoxColumn.ElementStyle = checkBoxStyle;");
+        StringAssert.Contains(source, "checkBoxColumn.EditingElementStyle = checkBoxStyle;");
+    }
+
     private static Task<string> ReadFixtureAsync(string name)
     {
         return File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "Fixtures", name));

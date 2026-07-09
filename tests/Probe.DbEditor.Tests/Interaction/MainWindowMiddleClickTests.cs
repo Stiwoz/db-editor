@@ -18,7 +18,7 @@ public sealed class MainWindowMiddleClickTests
             "behaviors:MiddleClickScrollBehavior.IsEnabled=\"True\"");
         StringAssert.Contains(
             mainWindowCode,
-            "panel.PreviewMouseDown += ConnectionTabHeader_PreviewMouseDown;");
+            "header.PreviewMouseDown += ConnectionTabHeader_PreviewMouseDown;");
         StringAssert.DoesNotMatch(
             mainWindowCode,
             new("tab\\.PreviewMouseDown\\s*\\+="));
@@ -36,22 +36,63 @@ public sealed class MainWindowMiddleClickTests
         StringAssert.Contains(mainWindowXaml, "StrokeDashArray=\"2 2\"");
         StringAssert.Contains(mainWindowXaml, "FavoriteRootDropPreview");
         StringAssert.Contains(mainWindowXaml, "FavoriteDragPreviewPopup");
+        StringAssert.Contains(mainWindowXaml, "IsHitTestVisible=\"False\"");
         StringAssert.Contains(mainWindowXaml, "ProfileColorList");
+        StringAssert.Contains(mainWindowXaml, "FolderDetailPanel");
+        StringAssert.Contains(mainWindowXaml, "FolderColorList");
+        StringAssert.Contains(mainWindowXaml, "SaveFolder_Click");
         StringAssert.Contains(mainWindowXaml, "FavoriteContextColorMenu");
+        StringAssert.Contains(mainWindowXaml, "FavoriteContextConnectMenuItem");
+        StringAssert.Contains(mainWindowXaml, "FavoriteContextDuplicateMenuItem");
+        StringAssert.Contains(mainWindowXaml, "FavoriteContextDeleteMenuItem");
+        StringAssert.Contains(mainWindowXaml, "FavoriteContextNewProfile_Click");
+        StringAssert.Contains(mainWindowXaml, "FavoriteDropPreviewPlacement.Before");
+        StringAssert.Contains(mainWindowXaml, "FavoriteDropPreviewPlacement.After");
+        StringAssert.Contains(mainWindowXaml, "FavoriteDropPreviewPlacement.Inside");
+        StringAssert.Contains(mainWindowXaml, "FavoriteColorListBoxItemStyle");
         Assert.IsFalse(mainWindowXaml.Contains("CornerRadius=\"4\"", StringComparison.Ordinal));
         Assert.IsTrue(
             mainWindowXaml.IndexOf("FavoriteContextColorMenu", StringComparison.Ordinal) <
-            mainWindowXaml.IndexOf("FavoriteContextNewConnection_Click", StringComparison.Ordinal));
+            mainWindowXaml.IndexOf("FavoriteContextConnect_Click", StringComparison.Ordinal));
         StringAssert.Contains(mainWindowCode, "LoadFavoritesAsync()");
         StringAssert.Contains(mainWindowCode, "SaveFavoritesAsync()");
         StringAssert.Contains(mainWindowCode, "DragDrop.DoDragDrop");
         StringAssert.Contains(mainWindowCode, "ClearFavoriteDragCandidate();");
         StringAssert.Contains(mainWindowCode, "SavedProfilesContextMenu_Closed");
         StringAssert.Contains(mainWindowCode, "_favoriteDragArmed");
+        StringAssert.Contains(mainWindowCode, "_favoriteDropPlacement");
+        StringAssert.Contains(mainWindowCode, "_isFavoriteRootDropTarget");
         StringAssert.Contains(mainWindowCode, "StartFavoriteDragPreview");
         StringAssert.Contains(mainWindowCode, "SetFavoriteDropTarget");
-        StringAssert.Contains(mainWindowCode, "ResolveDroppedProfile");
+        StringAssert.Contains(mainWindowCode, "ReferenceEquals(_favoriteDropTarget, dropTarget.PreviewItem)");
+        StringAssert.Contains(mainWindowCode, "FavoriteDragPayload");
+        StringAssert.Contains(mainWindowCode, "ResolveFavoriteDropTarget");
+        StringAssert.Contains(mainWindowCode, "ResolveFavoriteDropPlacement");
+        StringAssert.Contains(mainWindowCode, "TryResolveCachedProfileDropTarget");
+        StringAssert.Contains(mainWindowCode, "TryResolveCachedFolderDropTarget");
+        StringAssert.Contains(mainWindowCode, "IsPointerWithinCachedDropPreviewBand");
+        StringAssert.Contains(mainWindowCode, "FavoriteDropPreviewHitBuffer");
+        StringAssert.Contains(mainWindowCode, "FindVisualDescendantByName<FrameworkElement>(targetTreeItem, \"ItemRow\")");
+        StringAssert.Contains(mainWindowCode, "rowPosition.Y < 0 || rowPosition.Y > itemRow.ActualHeight");
+        StringAssert.Contains(mainWindowCode, "ResolveProfileDropTarget");
+        StringAssert.Contains(mainWindowCode, "ResolveFolderDropTarget");
+        StringAssert.Contains(mainWindowCode, "MoveFavoriteToDropTarget");
+        StringAssert.Contains(mainWindowCode, "MoveProfileToDropTarget");
+        StringAssert.Contains(mainWindowCode, "MoveFolderToDropTarget");
+        StringAssert.Contains(mainWindowCode, "FindFavoriteTreeViewItem");
+        StringAssert.Contains(mainWindowCode, "IsDragged = true");
+        StringAssert.Contains(mainWindowCode, "CaptureExpandedFolderIds");
+        StringAssert.Contains(mainWindowCode, "ConfirmDeleteFavorite");
+        StringAssert.Contains(mainWindowCode, "MessageBox.Show");
+        StringAssert.Contains(mainWindowCode, "DuplicateProfileAsync");
+        StringAssert.Contains(mainWindowCode, "LoadFolder");
         StringAssert.Contains(mainWindowCode, "FinishFavoriteRenameAsync");
+        StringAssert.Contains(mainWindowCode, "CreateConnectionTabHeader(profile, tab)");
+        StringAssert.Contains(mainWindowCode, "CreateConnectionTabHeaderBrush");
+        StringAssert.Contains(mainWindowCode, "Padding = new Thickness(0)");
+        StringAssert.Contains(mainWindowCode, "new Border");
+        StringAssert.Contains(mainWindowCode, "Padding = new Thickness(12, 6, 12, 6)");
+        StringAssert.Contains(mainWindowCode, "FavoriteColorPalette.CreateBackgroundBrush(profile.Color");
         StringAssert.Contains(mainWindowCode, "FavoriteColorPalette.CreateSwatchBrush");
     }
 

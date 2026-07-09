@@ -55,6 +55,21 @@
         <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
         <Setter Property="Padding" Value="6,4" />
         <Setter Property="SelectionBrush" Value="{StaticResource SelectionBackgroundBrush}" />
+        <Setter Property="ContextMenu">
+            <Setter.Value>
+                <ContextMenu>
+                    <MenuItem Header="Cut"
+                        Command="ApplicationCommands.Cut"
+                        CommandTarget="{Binding PlacementTarget, RelativeSource={RelativeSource AncestorType={x:Type ContextMenu}}}" />
+                    <MenuItem Header="Copy"
+                        Command="ApplicationCommands.Copy"
+                        CommandTarget="{Binding PlacementTarget, RelativeSource={RelativeSource AncestorType={x:Type ContextMenu}}}" />
+                    <MenuItem Header="Paste"
+                        Command="ApplicationCommands.Paste"
+                        CommandTarget="{Binding PlacementTarget, RelativeSource={RelativeSource AncestorType={x:Type ContextMenu}}}" />
+                </ContextMenu>
+            </Setter.Value>
+        </Setter>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="{x:Type TextBox}">
@@ -250,9 +265,98 @@
         </Setter>
     </Style>
 
-    <Style TargetType="{x:Type CheckBox}">
+    <Style x:Key="BaseCheckBoxStyle" TargetType="{x:Type CheckBox}">
         <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
         <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type CheckBox}">
+                    <BulletDecorator Background="Transparent">
+                        <BulletDecorator.Bullet>
+                            <Border x:Name="CheckBorder"
+                                Width="15"
+                                Height="15"
+                                Background="{StaticResource InputBackgroundBrush}"
+                                BorderBrush="{StaticResource BorderBrush}"
+                                BorderThickness="1">
+                                <Grid>
+                                    <Path x:Name="CheckMark"
+                                        Width="9"
+                                        Height="7"
+                                        HorizontalAlignment="Center"
+                                        VerticalAlignment="Center"
+                                        Data="M 0 3.5 L 3 6.5 L 9 0"
+                                        Stroke="{StaticResource TextBrush}"
+                                        StrokeEndLineCap="Square"
+                                        StrokeStartLineCap="Square"
+                                        StrokeThickness="1.8"
+                                        Stretch="Fill"
+                                        Visibility="Collapsed" />
+                                    <Rectangle x:Name="IndeterminateMark"
+                                        Width="7"
+                                        Height="2"
+                                        HorizontalAlignment="Center"
+                                        VerticalAlignment="Center"
+                                        Fill="{StaticResource TextBrush}"
+                                        Visibility="Collapsed" />
+                                </Grid>
+                            </Border>
+                        </BulletDecorator.Bullet>
+                        <ContentPresenter x:Name="CheckContent"
+                            Margin="7,0,0,0"
+                            HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                            VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                            Content="{TemplateBinding Content}"
+                            ContentStringFormat="{TemplateBinding ContentStringFormat}"
+                            ContentTemplate="{TemplateBinding ContentTemplate}"
+                            RecognizesAccessKey="True" />
+                    </BulletDecorator>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="CheckBorder" Property="BorderBrush"
+                                Value="{StaticResource AccentHoverBrush}" />
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                            <Setter TargetName="CheckBorder" Property="BorderBrush"
+                                Value="{StaticResource AccentBrush}" />
+                        </Trigger>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="CheckBorder" Property="Background"
+                                Value="{StaticResource AccentBrush}" />
+                            <Setter TargetName="CheckBorder" Property="BorderBrush"
+                                Value="{StaticResource AccentBrush}" />
+                            <Setter TargetName="CheckMark" Property="Visibility"
+                                Value="Visible" />
+                        </Trigger>
+                        <Trigger Property="IsChecked" Value="{x:Null}">
+                            <Setter TargetName="CheckBorder" Property="Background"
+                                Value="{StaticResource AccentBrush}" />
+                            <Setter TargetName="CheckBorder" Property="BorderBrush"
+                                Value="{StaticResource AccentBrush}" />
+                            <Setter TargetName="IndeterminateMark" Property="Visibility"
+                                Value="Visible" />
+                        </Trigger>
+                        <Trigger Property="Content" Value="{x:Null}">
+                            <Setter TargetName="CheckContent" Property="Visibility"
+                                Value="Collapsed" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.55" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style TargetType="{x:Type CheckBox}" BasedOn="{StaticResource BaseCheckBoxStyle}" />
+
+    <Style x:Key="DataGridCheckBoxStyle"
+        TargetType="{x:Type CheckBox}"
+        BasedOn="{StaticResource BaseCheckBoxStyle}">
+        <Setter Property="HorizontalAlignment" Value="Center" />
+        <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
 
     <Style x:Key="BaseButtonStyle" TargetType="{x:Type Button}">

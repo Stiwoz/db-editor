@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using Microsoft.Win32;
@@ -15,6 +16,8 @@ namespace Probe.DbEditor;
 
 public partial class MainWindow : Window
 {
+    private const double FavoriteDropPreviewHitBuffer = 32;
+
     private readonly ConnectionProfileStore _profileStore = new();
     private readonly ObservableCollection<ConnectionProfileFolder> _folders = [];
     private readonly ObservableCollection<ConnectionProfile> _profiles = [];
@@ -51,11 +54,15 @@ public partial class MainWindow : Window
     private FavoriteTreeItemViewModel? _favoriteDropTarget;
     private FavoriteTreeItemViewModel? _renamingFavoriteItem;
     private Point _favoriteDragStart;
+    private FavoriteDropPreviewPlacement _favoriteDropPlacement;
+    private string _favoriteDropPreviewName = "";
     private string _renameOriginalName = "";
     private bool _connectionOperationInProgress;
     private bool _favoriteDragArmed;
     private bool _isFavoriteDragging;
+    private bool _isFavoriteRootDropTarget;
     private bool _loadingProfile;
+    private ConnectionProfileFolder? _selectedFolder;
 
     public MainWindow()
     {
@@ -73,6 +80,8 @@ public partial class MainWindow : Window
         TlsModeCombo.SelectedIndex = 0;
         ProfileColorList.ItemsSource = _favoriteColorOptions;
         ProfileColorList.SelectedItem = _favoriteColorOptions[0];
+        FolderColorList.ItemsSource = _favoriteColorOptions;
+        FolderColorList.SelectedItem = _favoriteColorOptions[0];
 
         SavedProfilesTree.ItemsSource = _favoriteTree;
         var favorites = await _profileStore.LoadFavoritesAsync();
@@ -108,14 +117,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (item.Profile is not null)
-        {
-            await DeleteProfileAsync(item.Profile);
-        }
-        else if (item.Folder is not null)
-        {
-            await DeleteFolderAsync(item.Folder);
-        }
+        await DeleteFavoriteAsync(item);
     }
 
     private void SavedProfilesTree_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
@@ -123,6 +125,10 @@ public partial class MainWindow : Window
         if (e.NewValue is FavoriteTreeItemViewModel { Profile: not null } item)
         {
             LoadProfile(item.Profile);
+        }
+        else if (e.NewValue is FavoriteTreeItemViewModel { Folder: not null } folderItem)
+        {
+            LoadFolder(folderItem.Folder);
         }
     }
 
@@ -156,9 +162,10 @@ public partial class MainWindow : Window
             FindTreeViewItem(Mouse.DirectlyOver))?.DataContext as FavoriteTreeItemViewModel;
 
         FavoriteContextColorMenu.IsEnabled = _contextFavoriteItem is not null;
+        FavoriteContextConnectMenuItem.IsEnabled = _contextFavoriteItem?.Profile is not null;
+        FavoriteContextDuplicateMenuItem.IsEnabled = _contextFavoriteItem?.Profile is not null;
         FavoriteContextRenameMenuItem.IsEnabled = _contextFavoriteItem is not null;
-        FavoriteContextDeleteProfileMenuItem.IsEnabled = _contextFavoriteItem?.Profile is not null;
-        FavoriteContextDeleteFolderMenuItem.IsEnabled = _contextFavoriteItem?.Folder is not null;
+        FavoriteContextDeleteMenuItem.IsEnabled = _contextFavoriteItem is not null;
 
         foreach (var colorMenuItem in FavoriteContextColorMenu.Items.OfType<MenuItem>())
         {
@@ -172,7 +179,7 @@ public partial class MainWindow : Window
         ClearFavoriteDragCandidate();
     }
 
-    private void FavoriteContextNewConnection_Click(object sender, RoutedEventArgs e)
+    private void FavoriteContextNewProfile_Click(object sender, RoutedEventArgs e)
     {
         LoadProfile(new ConnectionProfile { FolderId = ContextFavoriteFolderId() });
     }
@@ -182,19 +189,28 @@ public partial class MainWindow : Window
         await AddFolderAsync();
     }
 
-    private async void FavoriteContextDeleteProfile_Click(object sender, RoutedEventArgs e)
+    private async void FavoriteContextConnect_Click(object sender, RoutedEventArgs e)
     {
         if (_contextFavoriteItem?.Profile is not null)
         {
-            await DeleteProfileAsync(_contextFavoriteItem.Profile);
+            LoadProfile(_contextFavoriteItem.Profile);
+            await ConnectCurrentProfileAsync();
         }
     }
 
-    private async void FavoriteContextDeleteFolder_Click(object sender, RoutedEventArgs e)
+    private async void FavoriteContextDuplicate_Click(object sender, RoutedEventArgs e)
     {
-        if (_contextFavoriteItem?.Folder is not null)
+        if (_contextFavoriteItem?.Profile is not null)
         {
-            await DeleteFolderAsync(_contextFavoriteItem.Folder);
+            await DuplicateProfileAsync(_contextFavoriteItem.Profile);
+        }
+    }
+
+    private async void FavoriteContextDelete_Click(object sender, RoutedEventArgs e)
+    {
+        if (_contextFavoriteItem is not null)
+        {
+            await DeleteFavoriteAsync(_contextFavoriteItem);
         }
     }
 
@@ -221,6 +237,11 @@ public partial class MainWindow : Window
             _selectedProfile.Color = color;
             ProfileColorList.SelectedItem = FavoriteColorOptionFor(color);
         }
+        else if (_contextFavoriteItem.Folder is not null &&
+                 _selectedFolder?.Id == _contextFavoriteItem.Folder.Id)
+        {
+            FolderColorList.SelectedItem = FavoriteColorOptionFor(color);
+        }
 
         var selectedId = _contextFavoriteItem.Id;
         var selectedKind = _contextFavoriteItem.Kind;
@@ -237,7 +258,21 @@ public partial class MainWindow : Window
         }
 
         var treeItem = FindTreeViewItem(e.OriginalSource);
-        if (treeItem?.DataContext is not FavoriteTreeItemViewModel { Profile: not null } item)
+        if (treeItem?.DataContext is FavoriteTreeItemViewModel { Folder: not null } folderItem &&
+            FindVisualAncestor<ToggleButton>(e.OriginalSource) is null &&
+            FindVisualAncestor<TextBox>(e.OriginalSource) is null)
+        {
+            treeItem.IsExpanded = true;
+            folderItem.IsExpanded = true;
+        }
+
+        if (treeItem?.DataContext is not FavoriteTreeItemViewModel item ||
+            (item.Profile is null && item.Folder is null))
+        {
+            return;
+        }
+
+        if (item.IsEditingName)
         {
             return;
         }
@@ -256,7 +291,8 @@ public partial class MainWindow : Window
     {
         if (!_favoriteDragArmed ||
             e.LeftButton != MouseButtonState.Pressed ||
-            _favoriteDragCandidate?.Profile is null)
+            _favoriteDragCandidate is null ||
+            (_favoriteDragCandidate.Profile is null && _favoriteDragCandidate.Folder is null))
         {
             return;
         }
@@ -268,7 +304,9 @@ public partial class MainWindow : Window
             return;
         }
 
-        var data = new DataObject(typeof(ConnectionProfile), _favoriteDragCandidate.Profile);
+        var data = new DataObject(
+            typeof(FavoriteDragPayload),
+            new FavoriteDragPayload(_favoriteDragCandidate.Kind, _favoriteDragCandidate.Id));
         try
         {
             StartFavoriteDragPreview(_favoriteDragCandidate);
@@ -285,11 +323,10 @@ public partial class MainWindow : Window
     private void SavedProfilesTree_DragOver(object sender, DragEventArgs e)
     {
         UpdateFavoriteDragPreviewPosition();
-        if (ResolveDroppedProfile(e, out var profile, out var targetFolderId, out var targetItem) &&
-            !string.Equals(profile.FolderId, targetFolderId, StringComparison.Ordinal))
+        if (ResolveFavoriteDropTarget(e) is { } dropTarget)
         {
             e.Effects = DragDropEffects.Move;
-            SetFavoriteDropTarget(targetItem, targetItem is null && string.IsNullOrEmpty(targetFolderId));
+            SetFavoriteDropTarget(dropTarget);
         }
         else
         {
@@ -302,21 +339,22 @@ public partial class MainWindow : Window
 
     private async void SavedProfilesTree_Drop(object sender, DragEventArgs e)
     {
-        if (!ResolveDroppedProfile(e, out var profile, out var targetFolderId, out _) ||
-            string.Equals(profile.FolderId, targetFolderId, StringComparison.Ordinal))
+        var dropTarget = ResolveFavoriteDropTarget(e);
+        if (dropTarget is null)
         {
             ClearFavoriteDropTarget();
             return;
         }
 
-        profile.FolderId = targetFolderId;
-        if (_selectedProfile?.Id == profile.Id)
+        MoveFavoriteToDropTarget(dropTarget);
+        if (dropTarget.Profile is not null &&
+            _selectedProfile?.Id == dropTarget.Profile.Id)
         {
-            _selectedProfile.FolderId = targetFolderId;
+            _selectedProfile.FolderId = dropTarget.TargetFolderId;
         }
 
         await SaveFavoritesAsync();
-        RefreshFavoriteTree(profile.Id, FavoriteTreeItemKind.Profile);
+        RefreshFavoriteTree(dropTarget.DraggedId, dropTarget.Kind);
         ClearFavoriteDropTarget();
         e.Handled = true;
     }
@@ -447,6 +485,23 @@ public partial class MainWindow : Window
         }
     }
 
+    private async void SaveFolder_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selectedFolder is null)
+        {
+            return;
+        }
+
+        _selectedFolder.Name = string.IsNullOrWhiteSpace(FolderNameTextBox.Text)
+            ? "New folder"
+            : FolderNameTextBox.Text.Trim();
+        _selectedFolder.Color = SelectedFolderColor();
+
+        await SaveFavoritesAsync();
+        RefreshFavoriteTree(_selectedFolder.Id, FavoriteTreeItemKind.Folder);
+        ConnectionStatusText.Text = "Folder saved.";
+    }
+
     private async void Connect_Click(object sender, RoutedEventArgs e)
     {
         await ConnectCurrentProfileAsync();
@@ -505,8 +560,12 @@ public partial class MainWindow : Window
             try
             {
                 var view = new SessionView(session);
-                var tab = new TabItem { Content = view };
-                tab.Header = CreateConnectionTabHeader(profile.Name, tab);
+                var tab = new TabItem
+                {
+                    Content = view,
+                    Padding = new Thickness(0)
+                };
+                tab.Header = CreateConnectionTabHeader(profile, tab);
 
                 ConnectionsTab.Items.Add(tab);
                 ConnectionsTab.SelectedItem = tab;
@@ -575,15 +634,20 @@ public partial class MainWindow : Window
         ConnectButton.IsEnabled = isEnabled;
     }
 
-    private DockPanel CreateConnectionTabHeader(string title, TabItem tab)
+    private Border CreateConnectionTabHeader(ConnectionProfile profile, TabItem tab)
     {
-        var panel = new DockPanel
+        var header = new Border
         {
-            LastChildFill = false,
-            Background = Brushes.Transparent,
+            Background = CreateConnectionTabHeaderBrush(profile),
+            Padding = new Thickness(12, 6, 12, 6),
             Tag = tab
         };
-        panel.PreviewMouseDown += ConnectionTabHeader_PreviewMouseDown;
+        header.PreviewMouseDown += ConnectionTabHeader_PreviewMouseDown;
+
+        var panel = new DockPanel
+        {
+            LastChildFill = false
+        };
 
         var closeButton = new Button
         {
@@ -607,11 +671,20 @@ public partial class MainWindow : Window
 
         panel.Children.Add(new TextBlock
         {
-            Text = title,
+            Text = profile.Name,
             VerticalAlignment = VerticalAlignment.Center
         });
         panel.Children.Add(closeButton);
-        return panel;
+        header.Child = panel;
+        return header;
+    }
+
+    private Brush CreateConnectionTabHeaderBrush(ConnectionProfile profile)
+    {
+        var inheritedColor = _folders
+            .FirstOrDefault(folder => string.Equals(folder.Id, profile.FolderId, StringComparison.Ordinal))
+            ?.Color ?? ConnectionFavoriteColor.None;
+        return FavoriteColorPalette.CreateBackgroundBrush(profile.Color, inheritedColor);
     }
 
     private void ConnectionTabHeader_PreviewMouseDown(object sender, MouseButtonEventArgs e)
@@ -640,15 +713,20 @@ public partial class MainWindow : Window
         string? selectedId = null,
         FavoriteTreeItemKind? selectedKind = null)
     {
+        var expandedFolderIds = CaptureExpandedFolderIds();
+        var hasExpansionState = _favoriteTree.Any(item => item.Folder is not null);
         _favoriteTree.Clear();
 
         var foldersById = _folders.ToDictionary(folder => folder.Id, StringComparer.Ordinal);
-        foreach (var folder in _folders.OrderBy(folder => folder.Name, StringComparer.CurrentCultureIgnoreCase))
+        foreach (var folder in _folders)
         {
-            var folderItem = FavoriteTreeItemViewModel.ForFolder(folder);
+            var isExpanded = !hasExpansionState ||
+                             expandedFolderIds.Contains(folder.Id) ||
+                             (selectedKind == FavoriteTreeItemKind.Folder &&
+                              string.Equals(selectedId, folder.Id, StringComparison.Ordinal));
+            var folderItem = FavoriteTreeItemViewModel.ForFolder(folder, isExpanded);
             foreach (var profile in _profiles
-                .Where(profile => string.Equals(profile.FolderId, folder.Id, StringComparison.Ordinal))
-                .OrderBy(profile => profile.Name, StringComparer.CurrentCultureIgnoreCase))
+                .Where(profile => string.Equals(profile.FolderId, folder.Id, StringComparison.Ordinal)))
             {
                 folderItem.Children.Add(FavoriteTreeItemViewModel.ForProfile(profile, folder.Color));
             }
@@ -657,8 +735,7 @@ public partial class MainWindow : Window
         }
 
         foreach (var profile in _profiles
-            .Where(profile => string.IsNullOrWhiteSpace(profile.FolderId) || !foldersById.ContainsKey(profile.FolderId))
-            .OrderBy(profile => profile.Name, StringComparer.CurrentCultureIgnoreCase))
+            .Where(profile => string.IsNullOrWhiteSpace(profile.FolderId) || !foldersById.ContainsKey(profile.FolderId)))
         {
             profile.FolderId = "";
             _favoriteTree.Add(FavoriteTreeItemViewModel.ForProfile(profile, ConnectionFavoriteColor.None));
@@ -668,6 +745,14 @@ public partial class MainWindow : Window
         {
             Dispatcher.BeginInvoke(() => SelectFavoriteTreeItem(selectedId, selectedKind.Value));
         }
+    }
+
+    private HashSet<string> CaptureExpandedFolderIds()
+    {
+        return _favoriteTree
+            .Where(item => item.Folder is not null && item.IsExpanded)
+            .Select(item => item.Id)
+            .ToHashSet(StringComparer.Ordinal);
     }
 
     private void NormalizeProfileFolders()
@@ -696,6 +781,63 @@ public partial class MainWindow : Window
         });
     }
 
+    private async Task DuplicateProfileAsync(ConnectionProfile profile)
+    {
+        var duplicate = profile.Clone(includeSecrets: true);
+        duplicate.Id = Guid.NewGuid().ToString("N");
+        duplicate.Name = UniqueProfileName($"{profile.Name} copy", profile.FolderId);
+
+        var sourceIndex = _profiles.IndexOf(profile);
+        if (sourceIndex >= 0)
+        {
+            _profiles.Insert(sourceIndex + 1, duplicate);
+        }
+        else
+        {
+            _profiles.Add(duplicate);
+        }
+
+        await SaveFavoritesAsync();
+        RefreshFavoriteTree(duplicate.Id, FavoriteTreeItemKind.Profile);
+        LoadProfile(duplicate);
+        _ = Dispatcher.BeginInvoke(() =>
+        {
+            ProfileNameTextBox.Focus();
+            ProfileNameTextBox.SelectAll();
+        });
+    }
+
+    private async Task DeleteFavoriteAsync(FavoriteTreeItemViewModel item)
+    {
+        if (!ConfirmDeleteFavorite(item))
+        {
+            return;
+        }
+
+        if (item.Profile is not null)
+        {
+            await DeleteProfileAsync(item.Profile);
+        }
+        else if (item.Folder is not null)
+        {
+            await DeleteFolderAsync(item.Folder);
+        }
+    }
+
+    private bool ConfirmDeleteFavorite(FavoriteTreeItemViewModel item)
+    {
+        var title = item.Profile is not null ? "Delete Profile" : "Delete Folder";
+        var message = item.Profile is not null
+            ? $"Delete profile \"{item.Name}\"?"
+            : $"Delete folder \"{item.Name}\" and all contained profiles?";
+        return MessageBox.Show(
+            this,
+            message,
+            title,
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning) == MessageBoxResult.Yes;
+    }
+
     private async Task DeleteProfileAsync(ConnectionProfile profile)
     {
         _profiles.Remove(profile);
@@ -721,7 +863,8 @@ public partial class MainWindow : Window
 
         await SaveFavoritesAsync();
         RefreshFavoriteTree();
-        if (_selectedProfile is not null && deletedProfileIds.Contains(_selectedProfile.Id))
+        if ((_selectedProfile is not null && deletedProfileIds.Contains(_selectedProfile.Id)) ||
+            string.Equals(_selectedFolder?.Id, folder.Id, StringComparison.Ordinal))
         {
             LoadProfile(new ConnectionProfile());
         }
@@ -772,41 +915,365 @@ public partial class MainWindow : Window
         }
     }
 
-    private bool ResolveDroppedProfile(
-        DragEventArgs e,
-        out ConnectionProfile profile,
-        out string targetFolderId,
-        out FavoriteTreeItemViewModel? targetItem)
+    private FavoriteDropTarget? ResolveFavoriteDropTarget(DragEventArgs e)
     {
-        profile = null!;
-        targetFolderId = "";
-        targetItem = null;
-        if (!e.Data.GetDataPresent(typeof(ConnectionProfile)) ||
-            e.Data.GetData(typeof(ConnectionProfile)) is not ConnectionProfile droppedProfile)
+        if (!e.Data.GetDataPresent(typeof(FavoriteDragPayload)) ||
+            e.Data.GetData(typeof(FavoriteDragPayload)) is not FavoriteDragPayload payload)
+        {
+            return null;
+        }
+
+        return payload.Kind switch
+        {
+            FavoriteTreeItemKind.Profile => _profiles.FirstOrDefault(profile => string.Equals(profile.Id, payload.Id, StringComparison.Ordinal)) is { } profile
+                ? ResolveProfileDropTarget(e, profile)
+                : null,
+            FavoriteTreeItemKind.Folder => _folders.FirstOrDefault(folder => string.Equals(folder.Id, payload.Id, StringComparison.Ordinal)) is { } folder
+                ? ResolveFolderDropTarget(e, folder)
+                : null,
+            _ => null
+        };
+    }
+
+    private FavoriteDropTarget? ResolveProfileDropTarget(DragEventArgs e, ConnectionProfile droppedProfile)
+    {
+        if (TryResolveCachedProfileDropTarget(e, droppedProfile, out var cachedDropTarget))
+        {
+            return cachedDropTarget;
+        }
+
+        var targetTreeItem = FindTreeViewItem(e.OriginalSource);
+        var targetItem = targetTreeItem?.DataContext as FavoriteTreeItemViewModel;
+        if (targetItem?.Profile is { } targetProfile)
+        {
+            var placement = ResolveFavoriteDropPlacement(e, targetTreeItem!, targetItem);
+            return CreateProfileDropTarget(droppedProfile, targetItem, placement);
+        }
+
+        if (targetItem?.Folder is { } targetFolder)
+        {
+            targetTreeItem!.IsExpanded = true;
+            targetItem.IsExpanded = true;
+            var targetIndex = ProfilesInFolder(targetFolder.Id)
+                .Count(profile => !string.Equals(profile.Id, droppedProfile.Id, StringComparison.Ordinal));
+            if (!IsEffectiveProfileMove(droppedProfile, targetFolder.Id, targetIndex))
+            {
+                return null;
+            }
+
+            return new FavoriteDropTarget(
+                FavoriteTreeItemKind.Profile,
+                droppedProfile.Id,
+                droppedProfile.Name,
+                Profile: droppedProfile,
+                Folder: null,
+                targetFolder.Id,
+                targetIndex,
+                targetItem,
+                FavoriteDropPreviewPlacement.Inside);
+        }
+
+        var rootTargetIndex = ProfilesInFolder("")
+            .Count(profile => !string.Equals(profile.Id, droppedProfile.Id, StringComparison.Ordinal));
+        return IsEffectiveProfileMove(droppedProfile, "", rootTargetIndex)
+            ? new FavoriteDropTarget(
+                FavoriteTreeItemKind.Profile,
+                droppedProfile.Id,
+                droppedProfile.Name,
+                Profile: droppedProfile,
+                Folder: null,
+                "",
+                rootTargetIndex,
+                PreviewItem: null,
+                FavoriteDropPreviewPlacement.None)
+            : null;
+    }
+
+    private bool TryResolveCachedProfileDropTarget(
+        DragEventArgs e,
+        ConnectionProfile droppedProfile,
+        out FavoriteDropTarget? dropTarget)
+    {
+        dropTarget = null;
+        if (_favoriteDropTarget?.Profile is null ||
+            _favoriteDropPlacement is not (FavoriteDropPreviewPlacement.Before or FavoriteDropPreviewPlacement.After) ||
+            string.Equals(_favoriteDropTarget.Profile.Id, droppedProfile.Id, StringComparison.Ordinal) ||
+            !IsPointerWithinCachedDropPreviewBand(e, _favoriteDropTarget, _favoriteDropPlacement))
         {
             return false;
         }
 
-        profile = droppedProfile;
-        targetItem = FindTreeViewItem(e.OriginalSource)?.DataContext as FavoriteTreeItemViewModel;
-        targetFolderId = targetItem switch
+        dropTarget = CreateProfileDropTarget(droppedProfile, _favoriteDropTarget, _favoriteDropPlacement);
+        return dropTarget is not null;
+    }
+
+    private FavoriteDropTarget? CreateProfileDropTarget(
+        ConnectionProfile droppedProfile,
+        FavoriteTreeItemViewModel targetItem,
+        FavoriteDropPreviewPlacement placement)
+    {
+        if (targetItem.Profile is not { } targetProfile ||
+            string.Equals(targetProfile.Id, droppedProfile.Id, StringComparison.Ordinal))
         {
-            { Folder: not null } => targetItem.Folder.Id,
-            { Profile: not null } => targetItem.Profile.FolderId,
-            _ => ""
-        };
-        return true;
+            return null;
+        }
+
+        var targetFolderId = targetProfile.FolderId;
+        var siblings = ProfilesInFolder(targetFolderId)
+            .Where(profile => !string.Equals(profile.Id, droppedProfile.Id, StringComparison.Ordinal))
+            .ToList();
+        var siblingIndex = siblings.FindIndex(profile => string.Equals(profile.Id, targetProfile.Id, StringComparison.Ordinal));
+        if (siblingIndex < 0)
+        {
+            return null;
+        }
+
+        var targetIndex = siblingIndex + (placement == FavoriteDropPreviewPlacement.After ? 1 : 0);
+        return IsEffectiveProfileMove(droppedProfile, targetFolderId, targetIndex)
+            ? new FavoriteDropTarget(
+                FavoriteTreeItemKind.Profile,
+                droppedProfile.Id,
+                droppedProfile.Name,
+                Profile: droppedProfile,
+                Folder: null,
+                targetFolderId,
+                targetIndex,
+                targetItem,
+                placement)
+            : null;
+    }
+
+    private FavoriteDropTarget? ResolveFolderDropTarget(DragEventArgs e, ConnectionProfileFolder droppedFolder)
+    {
+        if (TryResolveCachedFolderDropTarget(e, droppedFolder, out var cachedDropTarget))
+        {
+            return cachedDropTarget;
+        }
+
+        var targetTreeItem = FindTreeViewItem(e.OriginalSource);
+        var targetItem = targetTreeItem?.DataContext as FavoriteTreeItemViewModel;
+        if (targetItem?.Folder is not null)
+        {
+            var placement = ResolveFavoriteDropPlacement(e, targetTreeItem!, targetItem);
+            return CreateFolderDropTarget(droppedFolder, targetItem, placement);
+        }
+
+        if (targetTreeItem is not null)
+        {
+            return null;
+        }
+
+        var rootTargetIndex = _folders.Count(folder => !string.Equals(folder.Id, droppedFolder.Id, StringComparison.Ordinal));
+        return IsEffectiveFolderMove(droppedFolder, rootTargetIndex)
+            ? new FavoriteDropTarget(
+                FavoriteTreeItemKind.Folder,
+                droppedFolder.Id,
+                droppedFolder.Name,
+                Profile: null,
+                Folder: droppedFolder,
+                TargetFolderId: "",
+                rootTargetIndex,
+                PreviewItem: null,
+                FavoriteDropPreviewPlacement.None)
+            : null;
+    }
+
+    private bool TryResolveCachedFolderDropTarget(
+        DragEventArgs e,
+        ConnectionProfileFolder droppedFolder,
+        out FavoriteDropTarget? dropTarget)
+    {
+        dropTarget = null;
+        if (_favoriteDropTarget?.Folder is null ||
+            _favoriteDropPlacement is not (FavoriteDropPreviewPlacement.Before or FavoriteDropPreviewPlacement.After) ||
+            string.Equals(_favoriteDropTarget.Folder.Id, droppedFolder.Id, StringComparison.Ordinal) ||
+            !IsPointerWithinCachedDropPreviewBand(e, _favoriteDropTarget, _favoriteDropPlacement))
+        {
+            return false;
+        }
+
+        dropTarget = CreateFolderDropTarget(droppedFolder, _favoriteDropTarget, _favoriteDropPlacement);
+        return dropTarget is not null;
+    }
+
+    private FavoriteDropTarget? CreateFolderDropTarget(
+        ConnectionProfileFolder droppedFolder,
+        FavoriteTreeItemViewModel targetItem,
+        FavoriteDropPreviewPlacement placement)
+    {
+        if (targetItem.Folder is not { } targetFolder ||
+            string.Equals(targetFolder.Id, droppedFolder.Id, StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        var siblings = _folders
+            .Where(folder => !string.Equals(folder.Id, droppedFolder.Id, StringComparison.Ordinal))
+            .ToList();
+        var siblingIndex = siblings.FindIndex(folder => string.Equals(folder.Id, targetFolder.Id, StringComparison.Ordinal));
+        if (siblingIndex < 0)
+        {
+            return null;
+        }
+
+        var targetIndex = siblingIndex + (placement == FavoriteDropPreviewPlacement.After ? 1 : 0);
+        return IsEffectiveFolderMove(droppedFolder, targetIndex)
+            ? new FavoriteDropTarget(
+                FavoriteTreeItemKind.Folder,
+                droppedFolder.Id,
+                droppedFolder.Name,
+                Profile: null,
+                Folder: droppedFolder,
+                TargetFolderId: "",
+                targetIndex,
+                targetItem,
+                placement)
+            : null;
+    }
+
+    private FavoriteDropPreviewPlacement ResolveFavoriteDropPlacement(
+        DragEventArgs e,
+        TreeViewItem targetTreeItem,
+        FavoriteTreeItemViewModel targetItem)
+    {
+        var itemRow = FindVisualDescendantByName<FrameworkElement>(targetTreeItem, "ItemRow");
+        if (itemRow is not null)
+        {
+            var rowPosition = e.GetPosition(itemRow);
+            if (ReferenceEquals(_favoriteDropTarget, targetItem) &&
+                _favoriteDropPlacement is FavoriteDropPreviewPlacement.Before or FavoriteDropPreviewPlacement.After &&
+                (rowPosition.Y < 0 || rowPosition.Y > itemRow.ActualHeight))
+            {
+                return _favoriteDropPlacement;
+            }
+
+            var rowHeight = Math.Max(1, itemRow.ActualHeight);
+            return rowPosition.Y <= rowHeight / 2
+                ? FavoriteDropPreviewPlacement.Before
+                : FavoriteDropPreviewPlacement.After;
+        }
+
+        var targetHeight = Math.Max(1, targetTreeItem.ActualHeight);
+        return e.GetPosition(targetTreeItem).Y <= targetHeight / 2
+            ? FavoriteDropPreviewPlacement.Before
+            : FavoriteDropPreviewPlacement.After;
+    }
+
+    private void MoveFavoriteToDropTarget(FavoriteDropTarget dropTarget)
+    {
+        if (dropTarget.Profile is not null)
+        {
+            MoveProfileToDropTarget(dropTarget);
+        }
+        else if (dropTarget.Folder is not null)
+        {
+            MoveFolderToDropTarget(dropTarget);
+        }
+    }
+
+    private void MoveProfileToDropTarget(FavoriteDropTarget dropTarget)
+    {
+        if (dropTarget.Profile is null)
+        {
+            return;
+        }
+
+        _profiles.Remove(dropTarget.Profile);
+        dropTarget.Profile.FolderId = dropTarget.TargetFolderId;
+
+        var siblings = ProfilesInFolder(dropTarget.TargetFolderId)
+            .Where(profile => !string.Equals(profile.Id, dropTarget.Profile.Id, StringComparison.Ordinal))
+            .ToList();
+        var targetIndex = Math.Clamp(dropTarget.TargetIndex, 0, siblings.Count);
+        var insertIndex = _profiles.Count;
+        if (targetIndex < siblings.Count)
+        {
+            insertIndex = _profiles.IndexOf(siblings[targetIndex]);
+        }
+        else if (siblings.Count > 0)
+        {
+            insertIndex = _profiles.IndexOf(siblings[^1]) + 1;
+        }
+
+        _profiles.Insert(insertIndex, dropTarget.Profile);
+    }
+
+    private void MoveFolderToDropTarget(FavoriteDropTarget dropTarget)
+    {
+        if (dropTarget.Folder is null)
+        {
+            return;
+        }
+
+        _folders.Remove(dropTarget.Folder);
+        var siblings = _folders
+            .Where(folder => !string.Equals(folder.Id, dropTarget.Folder.Id, StringComparison.Ordinal))
+            .ToList();
+        var targetIndex = Math.Clamp(dropTarget.TargetIndex, 0, siblings.Count);
+        var insertIndex = _folders.Count;
+        if (targetIndex < siblings.Count)
+        {
+            insertIndex = _folders.IndexOf(siblings[targetIndex]);
+        }
+        else if (siblings.Count > 0)
+        {
+            insertIndex = _folders.IndexOf(siblings[^1]) + 1;
+        }
+
+        _folders.Insert(insertIndex, dropTarget.Folder);
+    }
+
+    private bool IsEffectiveProfileMove(
+        ConnectionProfile profile,
+        string targetFolderId,
+        int targetIndex)
+    {
+        if (!FavoriteFolderIdsMatch(profile.FolderId, targetFolderId))
+        {
+            return true;
+        }
+
+        var siblings = ProfilesInFolder(targetFolderId).ToList();
+        var currentIndex = siblings.FindIndex(candidate => string.Equals(candidate.Id, profile.Id, StringComparison.Ordinal));
+        return currentIndex >= 0 && currentIndex != targetIndex;
+    }
+
+    private bool IsEffectiveFolderMove(
+        ConnectionProfileFolder folder,
+        int targetIndex)
+    {
+        var siblings = _folders.ToList();
+        var currentIndex = siblings.FindIndex(candidate => string.Equals(candidate.Id, folder.Id, StringComparison.Ordinal));
+        return currentIndex >= 0 && currentIndex != targetIndex;
+    }
+
+    private IEnumerable<ConnectionProfile> ProfilesInFolder(string folderId)
+    {
+        return _profiles.Where(profile => FavoriteFolderIdsMatch(profile.FolderId, folderId));
+    }
+
+    private static bool FavoriteFolderIdsMatch(string profileFolderId, string folderId)
+    {
+        return string.IsNullOrWhiteSpace(folderId)
+            ? string.IsNullOrWhiteSpace(profileFolderId)
+            : string.Equals(profileFolderId, folderId, StringComparison.Ordinal);
     }
 
     private void ClearFavoriteDragCandidate()
     {
         _favoriteDragArmed = false;
+        if (_favoriteDragCandidate is not null)
+        {
+            _favoriteDragCandidate.IsDragged = false;
+        }
+
         _favoriteDragCandidate = null;
     }
 
     private void StartFavoriteDragPreview(FavoriteTreeItemViewModel item)
     {
         _isFavoriteDragging = true;
+        item.IsDragged = true;
         FavoriteDragPreviewText.Text = item.Name;
         FavoriteDragPreviewPopup.IsOpen = true;
         UpdateFavoriteDragPreviewPosition();
@@ -831,34 +1298,49 @@ public partial class MainWindow : Window
         FavoriteDragPreviewPopup.VerticalOffset = position.Y + 14;
     }
 
-    private void SetFavoriteDropTarget(FavoriteTreeItemViewModel? targetItem, bool isRootTarget)
+    private void SetFavoriteDropTarget(FavoriteDropTarget dropTarget)
     {
-        if (!ReferenceEquals(_favoriteDropTarget, targetItem))
+        var isRootTarget = dropTarget.PreviewItem is null;
+        if (ReferenceEquals(_favoriteDropTarget, dropTarget.PreviewItem) &&
+            _favoriteDropPlacement == dropTarget.Placement &&
+            _isFavoriteRootDropTarget == isRootTarget &&
+            string.Equals(_favoriteDropPreviewName, dropTarget.DraggedName, StringComparison.Ordinal))
         {
-            if (_favoriteDropTarget is not null)
-            {
-                _favoriteDropTarget.IsDropTarget = false;
-            }
-
-            _favoriteDropTarget = targetItem;
-            if (_favoriteDropTarget is not null)
-            {
-                _favoriteDropTarget.IsDropTarget = true;
-            }
+            return;
         }
 
-        FavoriteRootDropPreview.Visibility = isRootTarget ? Visibility.Visible : Visibility.Collapsed;
+        ClearFavoriteDropTarget();
+        _favoriteDropPlacement = dropTarget.Placement;
+        _favoriteDropPreviewName = dropTarget.DraggedName;
+        _isFavoriteRootDropTarget = isRootTarget;
+        if (dropTarget.PreviewItem is not null)
+        {
+            _favoriteDropTarget = dropTarget.PreviewItem;
+            _favoriteDropTarget.DropPreviewName = dropTarget.DraggedName;
+            _favoriteDropTarget.DropPreviewPlacement = dropTarget.Placement;
+            FavoriteRootDropPreview.Visibility = Visibility.Collapsed;
+            FavoriteRootDropPreviewText.Text = "";
+            return;
+        }
+
+        FavoriteRootDropPreviewText.Text = _favoriteDropPreviewName;
+        FavoriteRootDropPreview.Visibility = Visibility.Visible;
     }
 
     private void ClearFavoriteDropTarget()
     {
         if (_favoriteDropTarget is not null)
         {
-            _favoriteDropTarget.IsDropTarget = false;
+            _favoriteDropTarget.DropPreviewPlacement = FavoriteDropPreviewPlacement.None;
+            _favoriteDropTarget.DropPreviewName = "";
             _favoriteDropTarget = null;
         }
 
         FavoriteRootDropPreview.Visibility = Visibility.Collapsed;
+        FavoriteRootDropPreviewText.Text = "";
+        _favoriteDropPlacement = FavoriteDropPreviewPlacement.None;
+        _favoriteDropPreviewName = "";
+        _isFavoriteRootDropTarget = false;
     }
 
     private string CurrentFavoriteFolderId()
@@ -896,6 +1378,110 @@ public partial class MainWindow : Window
             current = current is Visual or System.Windows.Media.Media3D.Visual3D
                 ? VisualTreeHelper.GetParent(current)
                 : LogicalTreeHelper.GetParent(current);
+        }
+
+        return null;
+    }
+
+    private bool IsPointerWithinCachedDropPreviewBand(
+        DragEventArgs e,
+        FavoriteTreeItemViewModel item,
+        FavoriteDropPreviewPlacement placement)
+    {
+        var treeItem = FindFavoriteTreeViewItem(SavedProfilesTree, item);
+        if (treeItem is null)
+        {
+            return false;
+        }
+
+        var itemRow = FindVisualDescendantByName<FrameworkElement>(treeItem, "ItemRow");
+        if (itemRow is null)
+        {
+            var position = e.GetPosition(treeItem);
+            return position.X >= 0 &&
+                   position.X <= treeItem.ActualWidth &&
+                   position.Y >= -FavoriteDropPreviewHitBuffer &&
+                   position.Y <= treeItem.ActualHeight + FavoriteDropPreviewHitBuffer;
+        }
+
+        var rowPosition = e.GetPosition(itemRow);
+        if (rowPosition.X < 0 ||
+            rowPosition.X > itemRow.ActualWidth)
+        {
+            return false;
+        }
+
+        return placement switch
+        {
+            FavoriteDropPreviewPlacement.Before => rowPosition.Y < 0 &&
+                                                   rowPosition.Y >= -FavoriteDropPreviewHitBuffer,
+            FavoriteDropPreviewPlacement.After => rowPosition.Y > itemRow.ActualHeight &&
+                                                  rowPosition.Y <= itemRow.ActualHeight + FavoriteDropPreviewHitBuffer,
+            _ => false
+        };
+    }
+
+    private static TreeViewItem? FindFavoriteTreeViewItem(
+        ItemsControl parent,
+        FavoriteTreeItemViewModel target)
+    {
+        foreach (var item in parent.Items)
+        {
+            if (parent.ItemContainerGenerator.ContainerFromItem(item) is not TreeViewItem treeItem)
+            {
+                continue;
+            }
+
+            if (ReferenceEquals(item, target))
+            {
+                return treeItem;
+            }
+
+            var nested = FindFavoriteTreeViewItem(treeItem, target);
+            if (nested is not null)
+            {
+                return nested;
+            }
+        }
+
+        return null;
+    }
+
+    private static T? FindVisualAncestor<T>(object? originalSource)
+        where T : DependencyObject
+    {
+        var current = originalSource as DependencyObject;
+        while (current is not null)
+        {
+            if (current is T match)
+            {
+                return match;
+            }
+
+            current = current is Visual or System.Windows.Media.Media3D.Visual3D
+                ? VisualTreeHelper.GetParent(current)
+                : LogicalTreeHelper.GetParent(current);
+        }
+
+        return null;
+    }
+
+    private static T? FindVisualDescendantByName<T>(DependencyObject parent, string name)
+        where T : FrameworkElement
+    {
+        for (var index = 0; index < VisualTreeHelper.GetChildrenCount(parent); index++)
+        {
+            var child = VisualTreeHelper.GetChild(parent, index);
+            if (child is T element && string.Equals(element.Name, name, StringComparison.Ordinal))
+            {
+                return element;
+            }
+
+            var nested = FindVisualDescendantByName<T>(child, name);
+            if (nested is not null)
+            {
+                return nested;
+            }
         }
 
         return null;
@@ -961,12 +1547,15 @@ public partial class MainWindow : Window
                 return true;
             }
 
+            var wasExpanded = treeItem.IsExpanded;
             treeItem.IsExpanded = true;
             treeItem.UpdateLayout();
             if (SelectFavoriteTreeItem(treeItem, id, kind))
             {
                 return true;
             }
+
+            treeItem.IsExpanded = wasExpanded;
         }
 
         return false;
@@ -990,9 +1579,37 @@ public partial class MainWindow : Window
         }
     }
 
+    private string UniqueProfileName(string baseName, string folderId)
+    {
+        if (_profiles
+            .Where(profile => FavoriteFolderIdsMatch(profile.FolderId, folderId))
+            .All(profile => !string.Equals(profile.Name, baseName, StringComparison.CurrentCultureIgnoreCase)))
+        {
+            return baseName;
+        }
+
+        for (var index = 2; ; index++)
+        {
+            var candidate = $"{baseName} {index}";
+            if (_profiles
+                .Where(profile => FavoriteFolderIdsMatch(profile.FolderId, folderId))
+                .All(profile => !string.Equals(profile.Name, candidate, StringComparison.CurrentCultureIgnoreCase)))
+            {
+                return candidate;
+            }
+        }
+    }
+
     private ConnectionFavoriteColor SelectedFavoriteColor()
     {
         return ProfileColorList.SelectedItem is FavoriteColorOption option
+            ? option.Color
+            : ConnectionFavoriteColor.None;
+    }
+
+    private ConnectionFavoriteColor SelectedFolderColor()
+    {
+        return FolderColorList.SelectedItem is FavoriteColorOption option
             ? option.Color
             : ConnectionFavoriteColor.None;
     }
@@ -1020,7 +1637,10 @@ public partial class MainWindow : Window
         _loadingProfile = true;
         try
         {
+            _selectedFolder = null;
             _selectedProfile = profile.Clone(includeSecrets: true);
+            FolderDetailPanel.Visibility = Visibility.Collapsed;
+            ProfileDetailPanel.Visibility = Visibility.Visible;
             ProfileNameTextBox.Text = profile.Name;
             ProfileColorList.SelectedItem = FavoriteColorOptionFor(profile.Color);
             HostTextBox.Text = profile.Host;
@@ -1044,6 +1664,17 @@ public partial class MainWindow : Window
         {
             _loadingProfile = false;
         }
+    }
+
+    private void LoadFolder(ConnectionProfileFolder folder)
+    {
+        _selectedProfile = null;
+        _selectedFolder = folder;
+        ProfileDetailPanel.Visibility = Visibility.Collapsed;
+        FolderDetailPanel.Visibility = Visibility.Visible;
+        FolderNameTextBox.Text = folder.Name;
+        FolderColorList.SelectedItem = FavoriteColorOptionFor(folder.Color);
+        ConnectionStatusText.Text = "";
     }
 
     private ConnectionProfile ReadProfileFromForm(bool includeSecrets)
@@ -1171,4 +1802,19 @@ public partial class MainWindow : Window
             return Label;
         }
     }
+
+    private sealed record FavoriteDragPayload(
+        FavoriteTreeItemKind Kind,
+        string Id);
+
+    private sealed record FavoriteDropTarget(
+        FavoriteTreeItemKind Kind,
+        string DraggedId,
+        string DraggedName,
+        ConnectionProfile? Profile,
+        ConnectionProfileFolder? Folder,
+        string TargetFolderId,
+        int TargetIndex,
+        FavoriteTreeItemViewModel? PreviewItem,
+        FavoriteDropPreviewPlacement Placement);
 }

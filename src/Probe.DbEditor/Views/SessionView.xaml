@@ -177,7 +177,10 @@
                             <DataGrid.Columns>
                                 <DataGridTextColumn Header="Index" Binding="{Binding IndexName}"
                                     Width="180" />
-                                <DataGridCheckBoxColumn Header="Unique" Binding="{Binding IsUnique}"
+                                <DataGridCheckBoxColumn Header="Unique"
+                                    Binding="{Binding IsUnique}"
+                                    ElementStyle="{StaticResource DataGridCheckBoxStyle}"
+                                    EditingElementStyle="{StaticResource DataGridCheckBoxStyle}"
                                     Width="80" />
                                 <DataGridTextColumn Header="Seq" Binding="{Binding Sequence}"
                                     Width="60" />
@@ -317,7 +320,10 @@
                         <DataGrid.Columns>
                             <DataGridTextColumn Header="Time" Binding="{Binding StartedAt}"
                                 Width="180" />
-                            <DataGridCheckBoxColumn Header="OK" Binding="{Binding Success}"
+                            <DataGridCheckBoxColumn Header="OK"
+                                Binding="{Binding Success}"
+                                ElementStyle="{StaticResource DataGridCheckBoxStyle}"
+                                EditingElementStyle="{StaticResource DataGridCheckBoxStyle}"
                                 Width="50" />
                             <DataGridTextColumn Header="Duration ms" Binding="{Binding DurationMs}"
                                 Width="100" />

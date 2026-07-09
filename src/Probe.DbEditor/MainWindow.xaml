@@ -31,6 +31,48 @@
             <Setter Property="Padding" Value="12,5" />
             <Setter Property="Margin" Value="0,0,8,0" />
         </Style>
+        <Style x:Key="FavoriteColorListBoxItemStyle" TargetType="{x:Type ListBoxItem}">
+            <Setter Property="Padding" Value="3" />
+            <Setter Property="Margin" Value="0,0,6,0" />
+            <Setter Property="Width" Value="26" />
+            <Setter Property="Height" Value="26" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type ListBoxItem}">
+                        <Border x:Name="PaletteItemBorder"
+                            Background="Transparent"
+                            BorderBrush="Transparent"
+                            BorderThickness="1"
+                            Padding="{TemplateBinding Padding}">
+                            <ContentPresenter
+                                HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                RecognizesAccessKey="False" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="PaletteItemBorder" Property="BorderBrush"
+                                    Value="{StaticResource SelectionSoftBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="PaletteItemBorder" Property="BorderBrush"
+                                    Value="{StaticResource AccentBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                                <Setter TargetName="PaletteItemBorder" Property="BorderBrush"
+                                    Value="{StaticResource AccentBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.55" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </Window.Resources>
 
     <DockPanel>
@@ -133,33 +175,58 @@
                                             </MenuItem>
                                         </MenuItem>
                                         <Separator />
-                                        <MenuItem Header="New Connection"
-                                            Click="FavoriteContextNewConnection_Click" />
-                                        <MenuItem Header="New Folder"
-                                            Click="FavoriteContextNewFolder_Click" />
+                                        <MenuItem x:Name="FavoriteContextConnectMenuItem"
+                                            Header="Connect"
+                                            Click="FavoriteContextConnect_Click" />
+                                        <MenuItem x:Name="FavoriteContextDuplicateMenuItem"
+                                            Header="Duplicate"
+                                            Click="FavoriteContextDuplicate_Click" />
+                                        <MenuItem Header="New">
+                                            <MenuItem Header="Profile"
+                                                Click="FavoriteContextNewProfile_Click" />
+                                            <MenuItem Header="Folder"
+                                                Click="FavoriteContextNewFolder_Click" />
+                                        </MenuItem>
                                         <MenuItem x:Name="FavoriteContextRenameMenuItem"
                                             Header="Rename"
                                             Click="FavoriteContextRename_Click" />
-                                        <MenuItem x:Name="FavoriteContextDeleteProfileMenuItem"
-                                            Header="Delete Favorite"
-                                            Click="FavoriteContextDeleteProfile_Click" />
-                                        <MenuItem x:Name="FavoriteContextDeleteFolderMenuItem"
-                                            Header="Delete Folder"
-                                            Click="FavoriteContextDeleteFolder_Click" />
+                                        <MenuItem x:Name="FavoriteContextDeleteMenuItem"
+                                            Header="Delete"
+                                            Click="FavoriteContextDelete_Click" />
                                     </ContextMenu>
                                 </TreeView.ContextMenu>
                                 <TreeView.Resources>
                                     <Style TargetType="{x:Type TreeViewItem}">
-                                        <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
-                                        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                        <Setter Property="Foreground"
+                                            Value="{StaticResource TextBrush}" />
+                                        <Setter Property="HorizontalContentAlignment"
+                                            Value="Stretch" />
                                         <Setter Property="VerticalContentAlignment" Value="Center" />
+                                        <Setter Property="IsExpanded"
+                                            Value="{Binding IsExpanded, Mode=TwoWay}" />
                                         <Setter Property="Width"
                                             Value="{Binding ActualWidth, RelativeSource={RelativeSource AncestorType={x:Type TreeView}}}" />
                                         <Setter Property="Template">
                                             <Setter.Value>
                                                 <ControlTemplate TargetType="{x:Type TreeViewItem}">
                                                     <StackPanel>
-                                                        <Grid>
+                                                        <Grid x:Name="DropPreviewBefore"
+                                                            Height="26"
+                                                            IsHitTestVisible="False"
+                                                            Margin="0,1"
+                                                            Opacity="0.55"
+                                                            Visibility="Collapsed">
+                                                            <Rectangle Fill="Transparent"
+                                                                Stroke="{StaticResource AccentBrush}"
+                                                                StrokeDashArray="2 2"
+                                                                StrokeThickness="1" />
+                                                            <TextBlock Text="{Binding DropPreviewName}"
+                                                                Margin="24,0,8,0"
+                                                                Opacity="0.75"
+                                                                TextTrimming="CharacterEllipsis"
+                                                                VerticalAlignment="Center" />
+                                                        </Grid>
+                                                        <Grid x:Name="ItemRow">
                                                             <Border x:Name="ItemBorder"
                                                                 Background="{Binding BackgroundBrush}"
                                                                 BorderBrush="Transparent"
@@ -176,7 +243,8 @@
                                                                         IsChecked="{Binding IsExpanded, RelativeSource={RelativeSource TemplatedParent}}"
                                                                         ClickMode="Press"
                                                                         Visibility="Hidden" />
-                                                                    <ContentPresenter Grid.Column="1"
+                                                                    <ContentPresenter
+                                                                        Grid.Column="1"
                                                                         x:Name="PART_Header"
                                                                         ContentSource="Header"
                                                                         HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
@@ -184,39 +252,91 @@
                                                                         RecognizesAccessKey="False" />
                                                                 </Grid>
                                                             </Border>
-                                                            <Rectangle x:Name="DropPreviewBorder"
-                                                                Margin="1"
-                                                                Fill="Transparent"
-                                                                IsHitTestVisible="False"
-                                                                Opacity="0.55"
+                                                        </Grid>
+                                                        <Grid x:Name="DropPreviewInside"
+                                                            Height="26"
+                                                            IsHitTestVisible="False"
+                                                            Margin="18,1,0,1"
+                                                            Opacity="0.55"
+                                                            Visibility="Collapsed">
+                                                            <Rectangle Fill="Transparent"
                                                                 Stroke="{StaticResource AccentBrush}"
                                                                 StrokeDashArray="2 2"
-                                                                StrokeThickness="1"
-                                                                Visibility="Collapsed" />
+                                                                StrokeThickness="1" />
+                                                            <TextBlock Text="{Binding DropPreviewName}"
+                                                                Margin="24,0,8,0"
+                                                                Opacity="0.75"
+                                                                TextTrimming="CharacterEllipsis"
+                                                                VerticalAlignment="Center" />
                                                         </Grid>
-                                                        <ItemsPresenter x:Name="ItemsHost" Margin="18,0,0,0" />
+                                                        <ItemsPresenter x:Name="ItemsHost"
+                                                            Margin="18,0,0,0" />
+                                                        <Grid x:Name="DropPreviewAfter"
+                                                            Height="26"
+                                                            IsHitTestVisible="False"
+                                                            Margin="0,1"
+                                                            Opacity="0.55"
+                                                            Visibility="Collapsed">
+                                                            <Rectangle Fill="Transparent"
+                                                                Stroke="{StaticResource AccentBrush}"
+                                                                StrokeDashArray="2 2"
+                                                                StrokeThickness="1" />
+                                                            <TextBlock Text="{Binding DropPreviewName}"
+                                                                Margin="24,0,8,0"
+                                                                Opacity="0.75"
+                                                                TextTrimming="CharacterEllipsis"
+                                                                VerticalAlignment="Center" />
+                                                        </Grid>
                                                     </StackPanel>
                                                     <ControlTemplate.Triggers>
                                                         <Trigger Property="HasItems" Value="True">
-                                                            <Setter TargetName="Expander" Property="Visibility"
+                                                            <Setter TargetName="Expander"
+                                                                Property="Visibility"
                                                                 Value="Visible" />
                                                         </Trigger>
                                                         <Trigger Property="IsExpanded" Value="False">
-                                                            <Setter TargetName="ItemsHost" Property="Visibility"
+                                                            <Setter TargetName="ItemsHost"
+                                                                Property="Visibility"
                                                                 Value="Collapsed" />
                                                         </Trigger>
                                                         <Trigger Property="IsMouseOver" Value="True">
-                                                            <Setter TargetName="ItemBorder" Property="BorderBrush"
+                                                            <Setter TargetName="ItemBorder"
+                                                                Property="BorderBrush"
                                                                 Value="{StaticResource SelectionSoftBrush}" />
                                                         </Trigger>
                                                         <Trigger Property="IsSelected" Value="True">
-                                                            <Setter TargetName="ItemBorder" Property="BorderBrush"
+                                                            <Setter TargetName="ItemBorder"
+                                                                Property="BorderBrush"
                                                                 Value="{StaticResource AccentBrush}" />
                                                             <Setter Property="Foreground"
                                                                 Value="{StaticResource TextBrush}" />
                                                         </Trigger>
-                                                        <DataTrigger Binding="{Binding IsDropTarget}" Value="True">
-                                                            <Setter TargetName="DropPreviewBorder" Property="Visibility"
+                                                        <DataTrigger
+                                                            Binding="{Binding IsDragged}"
+                                                            Value="True">
+                                                            <Setter TargetName="ItemRow"
+                                                                Property="Opacity"
+                                                                Value="0.38" />
+                                                        </DataTrigger>
+                                                        <DataTrigger
+                                                            Binding="{Binding DropPreviewPlacement}"
+                                                            Value="{x:Static favorites:FavoriteDropPreviewPlacement.Before}">
+                                                            <Setter TargetName="DropPreviewBefore"
+                                                                Property="Visibility"
+                                                                Value="Visible" />
+                                                        </DataTrigger>
+                                                        <DataTrigger
+                                                            Binding="{Binding DropPreviewPlacement}"
+                                                            Value="{x:Static favorites:FavoriteDropPreviewPlacement.Inside}">
+                                                            <Setter TargetName="DropPreviewInside"
+                                                                Property="Visibility"
+                                                                Value="Visible" />
+                                                        </DataTrigger>
+                                                        <DataTrigger
+                                                            Binding="{Binding DropPreviewPlacement}"
+                                                            Value="{x:Static favorites:FavoriteDropPreviewPlacement.After}">
+                                                            <Setter TargetName="DropPreviewAfter"
+                                                                Property="Visibility"
                                                                 Value="Visible" />
                                                         </DataTrigger>
                                                     </ControlTemplate.Triggers>
@@ -224,7 +344,8 @@
                                             </Setter.Value>
                                         </Setter>
                                     </Style>
-                                    <HierarchicalDataTemplate DataType="{x:Type favorites:FavoriteTreeItemViewModel}"
+                                    <HierarchicalDataTemplate
+                                        DataType="{x:Type favorites:FavoriteTreeItemViewModel}"
                                         ItemsSource="{Binding Children}">
                                         <Grid HorizontalAlignment="Stretch">
                                             <TextBlock Text="{Binding Name}"
@@ -232,9 +353,11 @@
                                                 TextTrimming="CharacterEllipsis">
                                                 <TextBlock.Style>
                                                     <Style TargetType="{x:Type TextBlock}">
-                                                        <Setter Property="Visibility" Value="Visible" />
+                                                        <Setter Property="Visibility"
+                                                            Value="Visible" />
                                                         <Style.Triggers>
-                                                            <DataTrigger Binding="{Binding IsEditingName}"
+                                                            <DataTrigger
+                                                                Binding="{Binding IsEditingName}"
                                                                 Value="True">
                                                                 <Setter Property="Visibility"
                                                                     Value="Collapsed" />
@@ -243,7 +366,8 @@
                                                     </Style>
                                                 </TextBlock.Style>
                                             </TextBlock>
-                                            <TextBox Text="{Binding Name, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                            <TextBox
+                                                Text="{Binding Name, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                                 Margin="0"
                                                 Padding="4,1"
                                                 MinWidth="0"
@@ -253,9 +377,11 @@
                                                 <TextBox.Style>
                                                     <Style TargetType="{x:Type TextBox}"
                                                         BasedOn="{StaticResource BaseTextBoxStyle}">
-                                                        <Setter Property="Visibility" Value="Collapsed" />
+                                                        <Setter Property="Visibility"
+                                                            Value="Collapsed" />
                                                         <Style.Triggers>
-                                                            <DataTrigger Binding="{Binding IsEditingName}"
+                                                            <DataTrigger
+                                                                Binding="{Binding IsEditingName}"
                                                                 Value="True">
                                                                 <Setter Property="Visibility"
                                                                     Value="Visible" />
@@ -268,15 +394,23 @@
                                     </HierarchicalDataTemplate>
                                 </TreeView.Resources>
                             </TreeView>
-                            <Rectangle x:Name="FavoriteRootDropPreview"
+                            <Grid x:Name="FavoriteRootDropPreview"
+                                Height="26"
                                 Margin="4"
-                                Fill="Transparent"
                                 IsHitTestVisible="False"
                                 Opacity="0.55"
-                                Stroke="{StaticResource AccentBrush}"
-                                StrokeDashArray="2 2"
-                                StrokeThickness="1"
-                                Visibility="Collapsed" />
+                                VerticalAlignment="Bottom"
+                                Visibility="Collapsed">
+                                <Rectangle Fill="Transparent"
+                                    Stroke="{StaticResource AccentBrush}"
+                                    StrokeDashArray="2 2"
+                                    StrokeThickness="1" />
+                                <TextBlock x:Name="FavoriteRootDropPreviewText"
+                                    Margin="24,0,8,0"
+                                    Opacity="0.75"
+                                    TextTrimming="CharacterEllipsis"
+                                    VerticalAlignment="Center" />
+                            </Grid>
                             <Popup x:Name="FavoriteDragPreviewPopup"
                                 AllowsTransparency="True"
                                 IsHitTestVisible="False"
@@ -285,6 +419,7 @@
                                 <Border Background="{StaticResource SurfaceBrush}"
                                     BorderBrush="{StaticResource BorderBrush}"
                                     BorderThickness="1"
+                                    IsHitTestVisible="False"
                                     Opacity="0.88"
                                     Padding="8,4">
                                     <TextBlock x:Name="FavoriteDragPreviewText"
@@ -299,7 +434,42 @@
                         BorderThickness="1" Background="{StaticResource SurfaceBrush}" Padding="16">
                         <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="16">
                             <StackPanel MaxWidth="720" HorizontalAlignment="Left">
+                                <StackPanel x:Name="FolderDetailPanel" Visibility="Collapsed">
+                                    <TextBlock Text="Folder name" />
+                                    <TextBox x:Name="FolderNameTextBox" />
+                                    <TextBlock Text="Color" />
+                                    <ListBox x:Name="FolderColorList"
+                                        BorderThickness="0"
+                                        Background="Transparent"
+                                        Margin="0,3,0,9"
+                                        ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                        ScrollViewer.VerticalScrollBarVisibility="Disabled">
+                                        <ListBox.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <StackPanel Orientation="Horizontal" />
+                                            </ItemsPanelTemplate>
+                                        </ListBox.ItemsPanel>
+                                        <ListBox.ItemContainerStyle>
+                                            <StaticResource ResourceKey="FavoriteColorListBoxItemStyle" />
+                                        </ListBox.ItemContainerStyle>
+                                        <ListBox.ItemTemplate>
+                                            <DataTemplate>
+                                                <Border Width="16"
+                                                    Height="16"
+                                                    CornerRadius="8"
+                                                    Background="{Binding SwatchBrush}"
+                                                    BorderBrush="{Binding BorderBrush}"
+                                                    BorderThickness="1.5"
+                                                    ToolTip="{Binding Label}" />
+                                            </DataTemplate>
+                                        </ListBox.ItemTemplate>
+                                    </ListBox>
+                                    <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                        <Button Content="Save Folder" Click="SaveFolder_Click" />
+                                    </StackPanel>
+                                </StackPanel>
 
+                                <StackPanel x:Name="ProfileDetailPanel">
                                 <TextBlock Text="Profile name" />
                                 <TextBox x:Name="ProfileNameTextBox" />
                                 <TextBlock Text="Color" />
@@ -316,14 +486,7 @@
                                         </ItemsPanelTemplate>
                                     </ListBox.ItemsPanel>
                                     <ListBox.ItemContainerStyle>
-                                        <Style TargetType="{x:Type ListBoxItem}">
-                                            <Setter Property="Padding" Value="3" />
-                                            <Setter Property="Margin" Value="0,0,6,0" />
-                                            <Setter Property="Width" Value="26" />
-                                            <Setter Property="Height" Value="26" />
-                                            <Setter Property="HorizontalContentAlignment" Value="Center" />
-                                            <Setter Property="VerticalContentAlignment" Value="Center" />
-                                        </Style>
+                                        <StaticResource ResourceKey="FavoriteColorListBoxItemStyle" />
                                     </ListBox.ItemContainerStyle>
                                     <ListBox.ItemTemplate>
                                         <DataTemplate>
@@ -443,7 +606,7 @@
                                             <Button x:Name="BrowseSshKeyButton"
                                                 Grid.Column="2"
                                                 Content="..."
-                                                MinWidth="44"
+                                                MinWidth="36"
                                                 Margin="0,3,0,9"
                                                 Padding="10,5"
                                                 ToolTip="Browse for an SSH private key file."
@@ -463,6 +626,7 @@
                                         Content="Connect"
                                         Click="Connect_Click" />
                                     <Button Content="Save Profile" Click="SaveProfile_Click" />
+                                </StackPanel>
                                 </StackPanel>
 
                                 <TextBlock x:Name="ConnectionStatusText"

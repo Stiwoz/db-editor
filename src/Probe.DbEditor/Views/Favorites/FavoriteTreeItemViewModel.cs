@@ -9,7 +9,10 @@ namespace Probe.DbEditor.Views.Favorites;
 public sealed class FavoriteTreeItemViewModel : INotifyPropertyChanged
 {
     private bool _isEditingName;
-    private bool _isDropTarget;
+    private bool _isDragged;
+    private bool _isExpanded = true;
+    private FavoriteDropPreviewPlacement _dropPreviewPlacement;
+    private string _dropPreviewName = "";
 
     private FavoriteTreeItemViewModel(
         FavoriteTreeItemKind kind,
@@ -93,30 +96,77 @@ public sealed class FavoriteTreeItemViewModel : INotifyPropertyChanged
         }
     }
 
-    public bool IsDropTarget
+    public bool IsDragged
     {
-        get => _isDropTarget;
+        get => _isDragged;
         set
         {
-            if (_isDropTarget == value)
+            if (_isDragged == value)
             {
                 return;
             }
 
-            _isDropTarget = value;
+            _isDragged = value;
+            OnPropertyChanged();
+        }
+    }
+
+    public bool IsExpanded
+    {
+        get => _isExpanded;
+        set
+        {
+            if (_isExpanded == value)
+            {
+                return;
+            }
+
+            _isExpanded = value;
+            OnPropertyChanged();
+        }
+    }
+
+    public FavoriteDropPreviewPlacement DropPreviewPlacement
+    {
+        get => _dropPreviewPlacement;
+        set
+        {
+            if (_dropPreviewPlacement == value)
+            {
+                return;
+            }
+
+            _dropPreviewPlacement = value;
+            OnPropertyChanged();
+        }
+    }
+
+    public string DropPreviewName
+    {
+        get => _dropPreviewName;
+        set
+        {
+            if (string.Equals(_dropPreviewName, value, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            _dropPreviewName = value ?? "";
             OnPropertyChanged();
         }
     }
 
     public Brush BackgroundBrush => FavoriteColorPalette.CreateBackgroundBrush(Color, InheritedColor);
 
-    public static FavoriteTreeItemViewModel ForFolder(ConnectionProfileFolder folder)
+    public static FavoriteTreeItemViewModel ForFolder(ConnectionProfileFolder folder, bool isExpanded = true)
     {
-        return new FavoriteTreeItemViewModel(
+        var item = new FavoriteTreeItemViewModel(
             FavoriteTreeItemKind.Folder,
             profile: null,
             folder,
             inheritedColor: ConnectionFavoriteColor.None);
+        item.IsExpanded = isExpanded;
+        return item;
     }
 
     public static FavoriteTreeItemViewModel ForProfile(
