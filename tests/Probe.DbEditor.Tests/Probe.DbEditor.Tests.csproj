@@ -7,6 +7,7 @@
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
     <UseWPF>true</UseWPF>
+    <IsPublishable>false</IsPublishable>
   </PropertyGroup>
 
   <ItemGroup>
@@ -20,26 +21,26 @@
 
   <ItemGroup>
     <None Include="..\..\src\Probe.DbEditor\Themes\DarkTheme.xaml"
-        Link="Fixtures\DarkTheme.xaml"
-        CopyToOutputDirectory="PreserveNewest" />
+      Link="Fixtures\DarkTheme.xaml"
+      CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\..\src\Probe.DbEditor\MainWindow.xaml"
-        Link="Fixtures\MainWindow.xaml"
-        CopyToOutputDirectory="PreserveNewest" />
+      Link="Fixtures\MainWindow.xaml"
+      CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\..\src\Probe.DbEditor\MainWindow.xaml.cs"
-        Link="Fixtures\MainWindow.xaml.cs"
-        CopyToOutputDirectory="PreserveNewest" />
+      Link="Fixtures\MainWindow.xaml.cs"
+      CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\..\src\Probe.DbEditor\App.xaml.cs"
-        Link="Fixtures\App.xaml.cs"
-        CopyToOutputDirectory="PreserveNewest" />
+      Link="Fixtures\App.xaml.cs"
+      CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\..\src\Probe.DbEditor\Behaviors\MiddleClickScrollBehavior.cs"
-        Link="Fixtures\MiddleClickScrollBehavior.cs"
-        CopyToOutputDirectory="PreserveNewest" />
+      Link="Fixtures\MiddleClickScrollBehavior.cs"
+      CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\..\src\Probe.DbEditor\Views\SessionView.xaml.cs"
-        Link="Fixtures\SessionView.xaml.cs"
-        CopyToOutputDirectory="PreserveNewest" />
+      Link="Fixtures\SessionView.xaml.cs"
+      CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\..\src\Probe.DbEditor\Views\SessionView.xaml"
-        Link="Fixtures\SessionView.xaml"
-        CopyToOutputDirectory="PreserveNewest" />
+      Link="Fixtures\SessionView.xaml"
+      CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>
