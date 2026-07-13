@@ -209,85 +209,91 @@
                                         <Setter Property="Template">
                                             <Setter.Value>
                                                 <ControlTemplate TargetType="{x:Type TreeViewItem}">
-                                                    <StackPanel>
-                                                        <Grid x:Name="DropPreviewBefore"
-                                                            Height="26"
-                                                            IsHitTestVisible="True"
-                                                            Margin="0,1"
-                                                            Opacity="0.55"
-                                                            Visibility="Collapsed">
-                                                            <Rectangle Fill="Transparent"
-                                                                Stroke="{StaticResource AccentBrush}"
-                                                                StrokeDashArray="2 2"
-                                                                StrokeThickness="1" />
-                                                            <TextBlock Text="{Binding DropPreviewName}"
-                                                                Margin="24,0,8,0"
-                                                                Opacity="0.75"
-                                                                TextTrimming="CharacterEllipsis"
-                                                                VerticalAlignment="Center" />
+                                                    <Grid>
+                                                        <StackPanel>
+                                                            <Grid x:Name="ItemRow">
+                                                                <Border x:Name="ItemBorder"
+                                                                    Background="{Binding BackgroundBrush}"
+                                                                    BorderBrush="Transparent"
+                                                                    BorderThickness="1"
+                                                                    HorizontalAlignment="Stretch"
+                                                                    Padding="6,3">
+                                                                    <Grid>
+                                                                        <Grid.ColumnDefinitions>
+                                                                            <ColumnDefinition Width="18" />
+                                                                            <ColumnDefinition Width="*" />
+                                                                        </Grid.ColumnDefinitions>
+                                                                        <ToggleButton x:Name="Expander"
+                                                                            Style="{StaticResource TreeExpanderToggleStyle}"
+                                                                            IsChecked="{Binding IsExpanded, RelativeSource={RelativeSource TemplatedParent}}"
+                                                                            ClickMode="Press"
+                                                                            Visibility="Hidden" />
+                                                                        <ContentPresenter
+                                                                            Grid.Column="1"
+                                                                            x:Name="PART_Header"
+                                                                            ContentSource="Header"
+                                                                            HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                                                            VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                                                            RecognizesAccessKey="False" />
+                                                                    </Grid>
+                                                                </Border>
+                                                            </Grid>
+                                                            <Grid x:Name="DropPreviewInside"
+                                                                Height="26"
+                                                                IsHitTestVisible="True"
+                                                                Margin="18,1,0,1"
+                                                                Opacity="0.55"
+                                                                Visibility="Collapsed">
+                                                                <Rectangle Fill="Transparent"
+                                                                    Stroke="{StaticResource AccentBrush}"
+                                                                    StrokeDashArray="2 2"
+                                                                    StrokeThickness="1" />
+                                                                <TextBlock Text="{Binding DropPreviewName}"
+                                                                    Margin="24,0,8,0"
+                                                                    Opacity="0.75"
+                                                                    TextTrimming="CharacterEllipsis"
+                                                                    VerticalAlignment="Center" />
+                                                            </Grid>
+                                                            <ItemsPresenter x:Name="ItemsHost"
+                                                                Margin="18,0,0,0" />
+                                                        </StackPanel>
+                                                        <Grid x:Name="DropPreviewLayer"
+                                                            IsHitTestVisible="False"
+                                                            Panel.ZIndex="1">
+                                                            <Grid x:Name="DropPreviewBefore"
+                                                                Height="26"
+                                                                Margin="0,1"
+                                                                Opacity="0.55"
+                                                                VerticalAlignment="Top"
+                                                                Visibility="Collapsed">
+                                                                <Rectangle Fill="Transparent"
+                                                                    Stroke="{StaticResource AccentBrush}"
+                                                                    StrokeDashArray="2 2"
+                                                                    StrokeThickness="1" />
+                                                                <TextBlock Text="{Binding DropPreviewName}"
+                                                                    Margin="24,0,8,0"
+                                                                    Opacity="0.75"
+                                                                    TextTrimming="CharacterEllipsis"
+                                                                    VerticalAlignment="Center" />
+                                                            </Grid>
+                                                            <Grid x:Name="DropPreviewAfter"
+                                                                Height="26"
+                                                                Margin="0,1"
+                                                                Opacity="0.55"
+                                                                VerticalAlignment="Bottom"
+                                                                Visibility="Collapsed">
+                                                                <Rectangle Fill="Transparent"
+                                                                    Stroke="{StaticResource AccentBrush}"
+                                                                    StrokeDashArray="2 2"
+                                                                    StrokeThickness="1" />
+                                                                <TextBlock Text="{Binding DropPreviewName}"
+                                                                    Margin="24,0,8,0"
+                                                                    Opacity="0.75"
+                                                                    TextTrimming="CharacterEllipsis"
+                                                                    VerticalAlignment="Center" />
+                                                            </Grid>
                                                         </Grid>
-                                                        <Grid x:Name="ItemRow">
-                                                            <Border x:Name="ItemBorder"
-                                                                Background="{Binding BackgroundBrush}"
-                                                                BorderBrush="Transparent"
-                                                                BorderThickness="1"
-                                                                HorizontalAlignment="Stretch"
-                                                                Padding="6,3">
-                                                                <Grid>
-                                                                    <Grid.ColumnDefinitions>
-                                                                        <ColumnDefinition Width="18" />
-                                                                        <ColumnDefinition Width="*" />
-                                                                    </Grid.ColumnDefinitions>
-                                                                    <ToggleButton x:Name="Expander"
-                                                                        Style="{StaticResource TreeExpanderToggleStyle}"
-                                                                        IsChecked="{Binding IsExpanded, RelativeSource={RelativeSource TemplatedParent}}"
-                                                                        ClickMode="Press"
-                                                                        Visibility="Hidden" />
-                                                                    <ContentPresenter
-                                                                        Grid.Column="1"
-                                                                        x:Name="PART_Header"
-                                                                        ContentSource="Header"
-                                                                        HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
-                                                                        VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
-                                                                        RecognizesAccessKey="False" />
-                                                                </Grid>
-                                                            </Border>
-                                                        </Grid>
-                                                        <Grid x:Name="DropPreviewInside"
-                                                            Height="26"
-                                                            IsHitTestVisible="True"
-                                                            Margin="18,1,0,1"
-                                                            Opacity="0.55"
-                                                            Visibility="Collapsed">
-                                                            <Rectangle Fill="Transparent"
-                                                                Stroke="{StaticResource AccentBrush}"
-                                                                StrokeDashArray="2 2"
-                                                                StrokeThickness="1" />
-                                                            <TextBlock Text="{Binding DropPreviewName}"
-                                                                Margin="24,0,8,0"
-                                                                Opacity="0.75"
-                                                                TextTrimming="CharacterEllipsis"
-                                                                VerticalAlignment="Center" />
-                                                        </Grid>
-                                                        <ItemsPresenter x:Name="ItemsHost"
-                                                            Margin="18,0,0,0" />
-                                                        <Grid x:Name="DropPreviewAfter"
-                                                            Height="26"
-                                                            IsHitTestVisible="True"
-                                                            Margin="0,1"
-                                                            Opacity="0.55"
-                                                            Visibility="Collapsed">
-                                                            <Rectangle Fill="Transparent"
-                                                                Stroke="{StaticResource AccentBrush}"
-                                                                StrokeDashArray="2 2"
-                                                                StrokeThickness="1" />
-                                                            <TextBlock Text="{Binding DropPreviewName}"
-                                                                Margin="24,0,8,0"
-                                                                Opacity="0.75"
-                                                                TextTrimming="CharacterEllipsis"
-                                                                VerticalAlignment="Center" />
-                                                        </Grid>
-                                                    </StackPanel>
+                                                    </Grid>
                                                     <ControlTemplate.Triggers>
                                                         <Trigger Property="HasItems" Value="True">
                                                             <Setter TargetName="Expander"

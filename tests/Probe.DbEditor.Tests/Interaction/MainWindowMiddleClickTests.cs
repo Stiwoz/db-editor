@@ -36,6 +36,7 @@ public sealed class MainWindowMiddleClickTests
         StringAssert.Contains(mainWindowXaml, "StrokeDashArray=\"2 2\"");
         StringAssert.Contains(mainWindowXaml, "FavoriteRootDropPreview");
         StringAssert.Contains(mainWindowXaml, "FavoriteDragPreviewPopup");
+        StringAssert.Contains(mainWindowXaml, "x:Name=\"DropPreviewLayer\"");
         StringAssert.Contains(mainWindowXaml, "IsHitTestVisible=\"False\"");
         StringAssert.Contains(mainWindowXaml, "IsHitTestVisible=\"True\"");
         StringAssert.Contains(mainWindowXaml, "ProfileColorList");
@@ -55,6 +56,15 @@ public sealed class MainWindowMiddleClickTests
         Assert.IsTrue(
             mainWindowXaml.IndexOf("FavoriteContextColorMenu", StringComparison.Ordinal) <
             mainWindowXaml.IndexOf("FavoriteContextConnect_Click", StringComparison.Ordinal));
+        Assert.IsTrue(
+            mainWindowXaml.IndexOf("ItemsPresenter x:Name=\"ItemsHost\"", StringComparison.Ordinal) <
+            mainWindowXaml.IndexOf("x:Name=\"DropPreviewLayer\"", StringComparison.Ordinal));
+        var dropPreviewLayer = SliceBetween(
+            mainWindowXaml,
+            "x:Name=\"DropPreviewLayer\"",
+            "x:Name=\"DropPreviewBefore\"");
+        StringAssert.Contains(dropPreviewLayer, "IsHitTestVisible=\"False\"");
+        StringAssert.Contains(dropPreviewLayer, "Panel.ZIndex=\"1\"");
         StringAssert.Contains(mainWindowCode, "LoadFavoritesAsync()");
         StringAssert.Contains(mainWindowCode, "SaveFavoritesAsync()");
         StringAssert.Contains(mainWindowCode, "DragDrop.DoDragDrop");

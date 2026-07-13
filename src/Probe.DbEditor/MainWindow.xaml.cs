@@ -1028,7 +1028,7 @@ public partial class MainWindow : Window
             return null;
         }
 
-        var targetIndex = siblingIndex + (placement == FavoriteDropPreviewPlacement.After ? 1 : 0);
+        var targetIndex = FavoriteDropPlanner.TargetIndexForPlacement(siblingIndex, placement);
         return IsEffectiveProfileMove(droppedProfile, targetFolderId, targetIndex)
             ? new FavoriteDropTarget(
                 FavoriteTreeItemKind.Profile,
@@ -1116,7 +1116,7 @@ public partial class MainWindow : Window
             return null;
         }
 
-        var targetIndex = siblingIndex + (placement == FavoriteDropPreviewPlacement.After ? 1 : 0);
+        var targetIndex = FavoriteDropPlanner.TargetIndexForPlacement(siblingIndex, placement);
         return IsEffectiveFolderMove(droppedFolder, targetIndex)
             ? new FavoriteDropTarget(
                 FavoriteTreeItemKind.Folder,
@@ -1147,16 +1147,12 @@ public partial class MainWindow : Window
                 return _favoriteDropPlacement;
             }
 
-            var rowHeight = Math.Max(1, itemRow.ActualHeight);
-            return rowPosition.Y <= rowHeight / 2
-                ? FavoriteDropPreviewPlacement.Before
-                : FavoriteDropPreviewPlacement.After;
+            return FavoriteDropPlanner.PlacementFromPointerY(rowPosition.Y, itemRow.ActualHeight);
         }
 
-        var targetHeight = Math.Max(1, targetTreeItem.ActualHeight);
-        return e.GetPosition(targetTreeItem).Y <= targetHeight / 2
-            ? FavoriteDropPreviewPlacement.Before
-            : FavoriteDropPreviewPlacement.After;
+        return FavoriteDropPlanner.PlacementFromPointerY(
+            e.GetPosition(targetTreeItem).Y,
+            targetTreeItem.ActualHeight);
     }
 
     private void MoveFavoriteToDropTarget(FavoriteDropTarget dropTarget)
